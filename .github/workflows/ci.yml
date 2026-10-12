@@ -11,6 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
+      # for the map page's JS unit tests (tests/js), run by pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Install
         run: uv sync --python 3.12
       - name: Lint
@@ -21,3 +25,5 @@ jobs:
         run: uv run mypy src
       - name: Tests
         run: uv run pytest
+        env:
+          STRAGENT_REQUIRE_NODE: "1"  # no Node is a failure here, not a skip

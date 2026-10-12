@@ -53,7 +53,8 @@ uv run stragent snapshots / drop --snapshot DATE
 - Map page links built from data go through `httpsUrl()` in `dom.js` (`el()` drops any other
   `href`). CDN tags are version-pinned with `integrity` hashes; update the hash with the version.
 - Map page unit tests live in `tests/js/*.test.mjs` (Node's built-in runner, no npm packages).
-  `tests/test_frontend.py` runs them inside `make check` and skips them if Node is missing.
+  `tests/test_frontend.py` runs them inside `make check`; without Node they are skipped locally
+  and fail in CI (`STRAGENT_REQUIRE_NODE=1`, with Node installed by `actions/setup-node`).
 
 ## Frontend structure
 Plain ES modules served by FastAPI from `src/stragent/api/static/`, no framework and no build

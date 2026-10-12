@@ -1,5 +1,6 @@
 """Map page checks: the JavaScript unit tests (run with Node, no npm packages) and the CDN tags."""
 
+import os
 import re
 import shutil
 import subprocess
@@ -12,9 +13,16 @@ from stragent.api.app import STATIC_DIR
 JS_TESTS = sorted((Path(__file__).parent / "js").glob("*.test.mjs"))
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is not installed")
 def test_javascript_unit_tests():
-    """tests/js/*.test.mjs, including the https-only rule for links built from data."""
+    """tests/js/*.test.mjs, including the https-only rule for links built from data.
+
+    Skipped where Node.js is missing, unless STRAGENT_REQUIRE_NODE=1 (set in CI), which makes
+    that a failure so the tests cannot be skipped silently.
+    """
+    if shutil.which("node") is None:
+        if os.environ.get("STRAGENT_REQUIRE_NODE") == "1":
+            pytest.fail("Node.js is not installed, and STRAGENT_REQUIRE_NODE=1 requires it")
+        pytest.skip("Node.js is not installed")
     assert JS_TESTS
     run = subprocess.run(
         ["node", "--test", *map(str, JS_TESTS)], capture_output=True, text=True, timeout=120
