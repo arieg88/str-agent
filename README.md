@@ -140,14 +140,15 @@ src/stragent/
   cli.py             `stragent` command (ingest, analyze, serve, …)
   api/app.py         FastAPI factory: middleware, error handlers, static page
   api/routes.py      endpoints (thin wrappers around analysis.py)
-  api/static/index.html  map page (Leaflet + OpenStreetMap tiles)
-tests/               80 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
+  api/static/        map page: index.html (layout), css/app.css, js/*.js (ES modules, no build step)
+tests/               81 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
 ```
 
 ## Development
 
 ```bash
 make check     # ruff + mypy + pytest
+make lint-js   # optional: Biome on the map page (needs Node for npx; nothing is added to the project)
 ```
 
 CI runs the same checks on every push (`.github/workflows/ci.yml`).

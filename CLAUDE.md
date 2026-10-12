@@ -24,6 +24,7 @@ make check              # ruff + mypy + pytest (run before every commit)
 make demo               # synthetic data into data/demo.duckdb (never the real DB)
 make serve              # API + map page, http://127.0.0.1:8000 (docs at /docs)
 make serve-demo         # same, on the demo DB
+make lint-js            # optional: Biome on the map page via npx (not in check or CI)
 make ingest SNAPSHOT="2026-09-22 2026-06-20"
 uv run stragent analyze "Egnatia 120" --bedrooms 2 --radius 800
 uv run stragent snapshots / drop --snapshot DATE
@@ -35,7 +36,7 @@ uv run stragent snapshots / drop --snapshot DATE
 - `analytics/`: comps, revenue model, seasonality, geocoding, neighbourhoods (pure logic).
 - `data/`: cleaning, ingest, synthetic fixtures. `db.py`: DuckDB schema and migrations.
 - `models.py`: the Pydantic result contract (CLI JSON == API JSON). Extend, don't break.
-- `api/`: FastAPI app factory, thin routes, static map page (`api/static/index.html`).
+- `api/`: FastAPI app factory, thin routes, static map page (`api/static/`, see "Frontend structure").
 - `config/settings.toml`: every tunable assumption (radius, review rate, caps). No magic
   numbers in code.
 
@@ -46,6 +47,9 @@ uv run stragent snapshots / drop --snapshot DATE
 - Endpoints are sync `def` (DuckDB is blocking). One error shape:
   `{"error", "detail", "request_id"}`.
 - Map page: build DOM with `textContent`, never `innerHTML` with data.
+- Map page modules import one way: `main` -> `api`, `map`, `render`; `render` -> `charts`; all ->
+  `dom`. `render.js` must not import `map.js` (pass callbacks from `main.js`). `L` is the only
+  global and only `map.js` uses it. Asset URLs are absolute (`/static/...`).
 
 ## Frontend structure
 Plain ES modules served by FastAPI from `src/stragent/api/static/`, no framework and no build

@@ -1,4 +1,4 @@
-.PHONY: install demo ingest analyze snapshots serve serve-demo docker test lint typecheck check clean
+.PHONY: install demo ingest analyze snapshots serve serve-demo docker test lint lint-js typecheck check clean
 
 SNAPSHOT ?=
 CITY ?= thessaloniki
@@ -6,6 +6,8 @@ ADDR ?= 40.6326, 22.9416
 BEDROOMS ?= 2
 FIXTURE_DIR := data/fixtures/thessaloniki
 FIXTURE_SNAPSHOT := 2026-09-25
+# Run through npx at a pinned version: needs Node on the machine, adds nothing to the project
+BIOME := npx --yes @biomejs/biome@2.5.14
 # The demo uses its own database so synthetic data never mixes with real snapshots
 DEMO_DB := data/demo.duckdb
 
@@ -46,6 +48,9 @@ test:
 lint:
 	uv run ruff check src tests
 	uv run ruff format --check src tests
+
+lint-js:  ## Optional: lint the map page's JS and CSS with Biome (not part of check or CI)
+	$(BIOME) lint src/stragent/api/static
 
 typecheck:
 	uv run mypy src

@@ -9,8 +9,17 @@ This is the original plan. Where the build differs, this section wins.
 - **DuckDB instead of Postgres/PostGIS** for Stages 0-3 (distances via haversine SQL,
   neighbourhoods via shapely). Revisit at Stage 4 (pgvector) or keep DuckDB with its vector
   extension for a cheaper demo.
-- **Map page** is served by FastAPI from `src/stragent/api/static/` (no separate `web/` yet).
-- **Next:** split the map page into ES modules (layout in CLAUDE.md, "Frontend structure"), then Stage 3.
+- **Map page** is served by FastAPI from `src/stragent/api/static/` (no separate `web/` yet). It is
+  split into `index.html` (layout), `css/app.css` and ES modules in `js/` (see CLAUDE.md,
+  "Frontend structure"). `make lint-js` runs Biome on it through npx (optional, not in `make check`
+  or CI).
+- **Next:** Stage 3.
+- **Known follow-ups on the map page:**
+  - Dark mode gaps: `.error` is a hard-coded `#b3261e`, and map and chart colours are read once
+    when drawn, so they do not follow a theme switch until the next search.
+  - Keyboard access: comp rows are click-only; chart hit areas are focusable but have no label.
+  - Static files are served without `Cache-Control`, so a browser can keep an old module after an
+    edit during development (hard-reload, or add a no-cache header in dev).
 - **Cloud: AWS** (Stage 7 below).
 - **Possible addition:** long-term rent and sale €/m² per area (curated CSV from published
   Spitogatos SPI figures) for a short-term vs long-term yield comparison (fits Stage 8 ROI).

@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import CENTRE, SNAPSHOT, CoordsOnly
-from stragent.api.app import create_app
+from stragent.api.app import STATIC_DIR, create_app
 from stragent.models import Analysis, Seasonality
 
 pytestmark = pytest.mark.integration
@@ -117,6 +117,21 @@ def test_map_page_and_docs(client):
     page = client.get("/")
     assert page.status_code == 200 and "leaflet" in page.text
     assert client.get("/openapi.json").json()["info"]["title"] == "stragent"
+
+
+def test_map_page_assets_are_served(client):
+    scripts = sorted(p.name for p in (STATIC_DIR / "js").glob("*.js"))
+    assert "main.js" in scripts
+    expected = {"/": "text/html", "/static/css/app.css": "text/css"}
+    # text/javascript or application/javascript, depending on the Python version
+    expected |= {f"/static/js/{name}": "javascript" for name in scripts}
+    for path, content_type in expected.items():
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert content_type in r.headers["content-type"], path
+    page = client.get("/").text
+    assert 'href="/static/css/app.css"' in page
+    assert '<script type="module" src="/static/js/main.js">' in page
 
 
 def test_radius_via_api(client):

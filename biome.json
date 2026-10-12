@@ -1,0 +1,6 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": { "includes": ["src/stragent/api/static/**"] },
+  "formatter": { "enabled": false },
+  "linter": { "enabled": true, "rules": { "recommended": true, "style": { "useTemplate": "off" } } }
+}
