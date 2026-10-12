@@ -141,6 +141,7 @@ def build_context(
     room_type: str | None = None,
     quality: CompQuality | None = None,
     snapshot: str | None = None,
+    radius_m: int | None = None,
 ) -> Context:
     city = settings.city(city_key)
     snapshot = resolve_snapshot(con, settings, city_key, snapshot)
@@ -156,6 +157,7 @@ def build_context(
         bedrooms,
         settings.comps,
         quality,
+        radius_m,
     )
     if hood is None and selection.area.empty:
         raise OutOfAreaError(
@@ -176,9 +178,10 @@ def analyze(
     max_comps_listed: int = 15,
     quality: CompQuality | None = None,
     snapshot: str | None = None,
+    radius_m: int | None = None,
 ) -> Analysis:
     ctx = build_context(
-        con, settings, city_key, query, geocoder, bedrooms, room_type, quality, snapshot
+        con, settings, city_key, query, geocoder, bedrooms, room_type, quality, snapshot, radius_m
     )
     city, snapshot, selection, hood = ctx.city, ctx.snapshot, ctx.selection, ctx.neighbourhood
     comps = selection.comps
@@ -206,7 +209,8 @@ def analyze(
     if stats.count < target:
         warnings.append(
             f"Only {stats.count} comparable listings within {selection.filters.radius_m} m "
-            f"(target {target}); treat the ranges as rough."
+            f"(target {target}); treat the ranges as rough"
+            + (" or try a larger radius." if selection.filters.radius_mode == "fixed" else ".")
         )
     elif selection.filters.radius_widened:
         warnings.append(
@@ -253,6 +257,7 @@ def analyze(
                 price=float(row["price"]),
                 minimum_nights=_opt_int(row["minimum_nights"]),
                 number_of_reviews_ltm=_opt_int(row["number_of_reviews_ltm"]),
+                number_of_reviews=_opt_int(row["number_of_reviews"]),
                 review_scores_rating=_opt_float(row["review_scores_rating"]),
                 active_since=_opt_date(row["first_review"]),
                 host_since=_opt_date(row["host_since"]),
@@ -298,10 +303,11 @@ def seasonality(
     quality: CompQuality | None = None,
     snapshot: str | None = None,
     review_months: int = 24,
+    radius_m: int | None = None,
 ) -> Seasonality:
     """Month-by-month demand signals for the same comps analyze() would use."""
     ctx = build_context(
-        con, settings, city_key, query, geocoder, bedrooms, room_type, quality, snapshot
+        con, settings, city_key, query, geocoder, bedrooms, room_type, quality, snapshot, radius_m
     )
     ids = [int(i) for i in ctx.selection.comps["id"].tolist()]
     calendar, calendar_listings = forward_calendar(con, city_key, ctx.snapshot, ids)

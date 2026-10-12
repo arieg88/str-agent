@@ -110,6 +110,7 @@ def _run_analyze(
         max_comps_listed=req.show,
         quality=req.quality(),
         snapshot=req.snapshot,
+        radius_m=req.radius_m,
     )
 
 
@@ -167,6 +168,7 @@ def seasonality_endpoint(
         quality=req.quality(),
         snapshot=req.snapshot,
         review_months=req.months,
+        radius_m=req.radius_m,
     )
 
 

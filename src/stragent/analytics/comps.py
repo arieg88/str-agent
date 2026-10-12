@@ -14,6 +14,10 @@ from stragent.db import LATER_LISTING_COLUMNS
 from stragent.models import CompFilters, CompStats, MarketStats, ValueRange
 
 
+class RadiusError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class CompQuality:
     """Optional quality filters applied to comps (not to the market stats)."""
@@ -121,9 +125,18 @@ def select_comps(
     bedrooms: int | None,
     cfg: CompsConfig,
     quality: CompQuality | None = None,
+    radius_m: int | None = None,
 ) -> CompSelection:
-    """Use the smallest radius step that yields ``min_comps``; otherwise the largest step."""
-    steps = sorted(cfg.radius_steps_m)
+    """Pick comps within a radius.
+
+    With ``radius_m`` the radius is fixed. Otherwise use the smallest configured step that yields
+    ``min_comps``, or the largest step if none does.
+    """
+    if radius_m is not None and not cfg.min_radius_m <= radius_m <= cfg.max_radius_m:
+        raise RadiusError(
+            f"Radius must be between {cfg.min_radius_m} and {cfg.max_radius_m} m (got {radius_m})."
+        )
+    steps = [radius_m] if radius_m is not None else sorted(cfg.radius_steps_m)
     widest = listings_within(con, city, snapshot, lat, lon, steps[-1])
 
     chosen_radius = steps[-1]
@@ -143,6 +156,7 @@ def select_comps(
         bedrooms=bedrooms,
         bedroom_tolerance=cfg.bedroom_tolerance,
         radius_m=chosen_radius,
+        radius_mode="fixed" if radius_m is not None else "auto",
         radius_widened=chosen_radius != steps[0],
         min_comps_target=cfg.min_comps,
         min_reviews_ltm=q.min_reviews_ltm,

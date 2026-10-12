@@ -22,6 +22,9 @@ class CompFilterParams(BaseModel):
     min_rating: float | None = Field(None, ge=0, le=5)
     max_min_nights: int | None = Field(None, ge=1)
     superhost_only: bool = False
+    radius_m: int | None = Field(
+        None, description="Search radius in metres; default: auto (500 m widened as needed)"
+    )
     snapshot: str | None = Field(None, description="YYYY-MM-DD; default: latest loaded")
     city: str = "thessaloniki"
 

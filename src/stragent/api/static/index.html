@@ -118,6 +118,12 @@
           <select id="snapshot"><option value="">Latest</option></select>
         </label>
       </div>
+      <label>Search radius: <output id="radius_out">Auto</output>
+        <input id="radius" type="range" min="0" max="3000" step="100" value="0"
+               aria-describedby="radius_help">
+      </label>
+      <div id="radius_help" class="muted">Auto starts at 500 m and widens until there are 10 comps.
+        Slide right to fix the radius; click the map to move the point.</div>
       <details class="filters">
         <summary>Comp filters</summary>
         <div class="row">
@@ -207,6 +213,7 @@ function filters() {
   if (num("min_rating") != null) p.min_rating = num("min_rating");
   if (num("max_min_nights") != null) p.max_min_nights = num("max_min_nights");
   if ($("superhost_only").checked) p.superhost_only = true;
+  if (Number($("radius").value) > 0) p.radius_m = Number($("radius").value);
   return p;
 }
 function locationOf(text) {
@@ -214,6 +221,15 @@ function locationOf(text) {
   return m ? { lat: Number(m[1]), lon: Number(m[2]) } : { address: text.trim() };
 }
 function showError(msg) { $("err").textContent = msg; $("err").classList.remove("hidden"); }
+
+$("radius").addEventListener("input", () => {
+  const v = Number($("radius").value);
+  $("radius_out").textContent = v ? v.toLocaleString("en") + " m" : "Auto";
+});
+// Re-run when the slider is released, if there is already a result on screen.
+$("radius").addEventListener("change", () => {
+  if (!$("results").classList.contains("hidden")) $("f").requestSubmit();
+});
 
 $("f").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -266,7 +282,7 @@ function render(a, all, season) {
     });
     const box = el("div", {},
       el("b", { text: eur(c.price) + " / night" }), el("br"),
-      `${c.bedrooms ?? "?"} bd · ${c.number_of_reviews_ltm ?? 0} reviews (12 m) · rating ${c.review_scores_rating ?? "–"}`, el("br"),
+      `${c.bedrooms ?? "?"} bd · ${c.number_of_reviews_ltm ?? 0} reviews in 12 m (${c.number_of_reviews ?? 0} total) · rating ${c.review_scores_rating ?? "–"}`, el("br"),
       `Est. revenue ${eur(c.est_revenue)} · active since ${c.active_since ? c.active_since.slice(0, 7) : "–"}`, el("br"),
       el("a", { href: c.url, target: "_blank", rel: "noopener", text: "Open on Airbnb" }));
     m.bindPopup(box);
@@ -291,7 +307,7 @@ function renderSummary(a, cuts) {
   const f = a.filters, loc = a.location;
   box.append(el("h2", { text: loc.neighbourhood || "Selected location" }));
   box.append(el("div", { class: "muted",
-    text: `${a.comp_stats.count} comps · ${f.room_type} · bedrooms ${f.bedrooms ?? "any"}${f.bedrooms != null ? " ±" + f.bedroom_tolerance : ""} · within ${f.radius_m} m · snapshot ${a.snapshot_date}` }));
+    text: `${a.comp_stats.count} comps · ${f.room_type} · bedrooms ${f.bedrooms ?? "any"}${f.bedrooms != null ? " ±" + f.bedroom_tolerance : ""} · within ${f.radius_m} m${f.radius_mode === "auto" ? " (auto)" : ""} · snapshot ${a.snapshot_date}` }));
   for (const w of a.warnings) box.append(el("div", { class: "warn", text: w }));
   const grid = el("div", { class: "kpis", style: "margin-top:10px" },
     kpi("Nightly price", a.comp_stats.nightly_price, eur),
@@ -390,11 +406,12 @@ function renderMarket(m) {
 function renderComps(a) {
   const box = $("comps");
   const table = el("table", {}, el("tr", {},
-    ...["Dist.", "Bd", "Price", "Rev. 12m", "Rating", "Est. rev.", "Since"].map((h) => el("th", { text: h }))));
+    ...["Dist.", "Bd", "Price", "Rev. 12m", "Rev. total", "Rating", "Est. rev.", "Since"].map((h) => el("th", { text: h }))));
   for (const c of a.comps) {
     const tr = el("tr", { class: "comp", title: c.name || "" },
       el("td", { text: Math.round(c.distance_m) + " m" }), el("td", { text: c.bedrooms ?? "–" }),
       el("td", { text: eur(c.price) }), el("td", { text: c.number_of_reviews_ltm ?? "–" }),
+      el("td", { text: c.number_of_reviews ?? "–" }),
       el("td", { text: c.review_scores_rating != null ? c.review_scores_rating.toFixed(2) : "–" }),
       el("td", { text: eur(c.est_revenue) }), el("td", { text: c.active_since ? c.active_since.slice(0, 7) : "–" }));
     tr.addEventListener("click", () => {

@@ -20,7 +20,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from stragent.analysis import NoDataError, OutOfAreaError, analyze
-from stragent.analytics.comps import CompQuality
+from stragent.analytics.comps import CompQuality, RadiusError
 from stragent.analytics.geocode import GeocodingError, NominatimGeocoder
 from stragent.config import Settings, get_settings
 from stragent.data.fixtures import build_fixture
@@ -206,7 +206,8 @@ def render(result: Analysis) -> None:
     summary.add_row(
         "Comps",
         f"{result.comp_stats.count} × {f.room_type}, bedrooms {beds}, "
-        f"within {f.radius_m} m ({result.comp_stats.active_count} active)",
+        f"within {f.radius_m} m{' (auto)' if f.radius_mode == 'auto' else ''} "
+        f"({result.comp_stats.active_count} active)",
     )
     extra = CompQuality(
         min_reviews_ltm=f.min_reviews_ltm,
@@ -251,6 +252,7 @@ def render(result: Analysis) -> None:
         ("Beds", "right"),
         ("Price", "right"),
         ("Reviews 12m", "right"),
+        ("Reviews total", "right"),
         ("Rating", "right"),
         ("Est. revenue", "right"),
         ("Active since", "right"),
@@ -263,6 +265,7 @@ def render(result: Analysis) -> None:
             "-" if c.bedrooms is None else str(c.bedrooms),
             _money(c.price, cur),
             "-" if c.number_of_reviews_ltm is None else str(c.number_of_reviews_ltm),
+            "-" if c.number_of_reviews is None else str(c.number_of_reviews),
             "-" if c.review_scores_rating is None else f"{c.review_scores_rating:.2f}",
             "-" if c.est_revenue is None else _money(c.est_revenue, cur),
             "-" if c.active_since is None else c.active_since.strftime("%Y-%m"),
@@ -300,6 +303,10 @@ def analyze_cmd(
         typer.Option(help="Only comps whose minimum stay is at most this (drops monthly rentals)"),
     ] = None,
     superhost_only: Annotated[bool, typer.Option(help="Only comps run by superhosts")] = False,
+    radius: Annotated[
+        int | None,
+        typer.Option(help="Search radius in metres (default: auto, 500 m widened to 1.5 km)"),
+    ] = None,
     show: Annotated[int, typer.Option(help="How many comps to list in the table")] = 15,
     snapshot: Annotated[
         str | None, typer.Option(help="Snapshot date to use (default: latest loaded)")
@@ -341,8 +348,9 @@ def analyze_cmd(
             max_comps_listed=show,
             quality=quality,
             snapshot=snapshot,
+            radius_m=radius,
         )
-    except (GeocodingError, OutOfAreaError, NoDataError) as exc:
+    except (GeocodingError, OutOfAreaError, NoDataError, RadiusError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
     finally:

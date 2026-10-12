@@ -46,6 +46,7 @@ Narrow the comps (market stats always use every listing in the radius):
 ```bash
 uv run stragent analyze "Egnatia 120" --bedrooms 2 \
     --min-reviews 5 --min-rating 4.5 --max-min-nights 7 --superhost-only --show 30
+uv run stragent analyze "Egnatia 120" --radius 800    # fixed radius instead of auto
 ```
 
 Remove a snapshot you no longer want: `uv run stragent drop --snapshot 2026-06-20`.
@@ -103,7 +104,8 @@ is the contract later stages build on.
 1. **Geocode** the address with OpenStreetMap Nominatim, biased to the city, cached on disk and
    throttled to one request per second. `lat, lon` input skips this.
 2. **Find comps**: same room type, bedrooms ±1, valid price, within 500 m. Fewer than 10? Widen to
-   1 km, then 1.5 km, and say so.
+   1 km, then 1.5 km, and say so. Or set the radius yourself (`--radius`, `radius_m` in the API,
+   the slider on the map page), between 100 m and 5 km; a fixed radius is never widened.
 3. **Estimate occupancy per comp** from reviews, following Inside Airbnb's data assumptions:
    `bookings = reviews in last 12 months ÷ 50% review rate`,
    `nights = bookings × max(3, minimum nights)`, capped at 70% of the year.
@@ -139,7 +141,7 @@ src/stragent/
   api/app.py         FastAPI factory: middleware, error handlers, static page
   api/routes.py      endpoints (thin wrappers around analysis.py)
   api/static/index.html  map page (Leaflet + OpenStreetMap tiles)
-tests/               72 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
+tests/               80 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
 ```
 
 ## Development

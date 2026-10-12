@@ -18,7 +18,11 @@ viewbox = [22.85, 40.55, 23.05, 40.70]
 
 [comps]
 default_room_type = "Entire home/apt"
+# Auto radius: try each step until min_comps are found. A radius chosen by the user (--radius)
+# is used as-is, between min_radius_m and max_radius_m.
 radius_steps_m = [500, 1000, 1500]
+min_radius_m = 100
+max_radius_m = 5000
 min_comps = 10
 bedroom_tolerance = 1
 # Ignore obviously broken prices (local currency per night)

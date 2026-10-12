@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from stragent import __version__
 from stragent.analysis import NoDataError, OutOfAreaError
+from stragent.analytics.comps import RadiusError
 from stragent.analytics.geocode import Geocoder, GeocodingError, NominatimGeocoder
 from stragent.api.deps import GeocoderFactory
 from stragent.api.routes import router
@@ -107,6 +108,10 @@ def create_app(
     @app.exception_handler(OutOfAreaError)
     async def _out_of_area(request: Request, exc: OutOfAreaError) -> JSONResponse:
         return _error(422, "out_of_area", str(exc), request)
+
+    @app.exception_handler(RadiusError)
+    async def _radius(request: Request, exc: RadiusError) -> JSONResponse:
+        return _error(422, "invalid_radius", str(exc), request)
 
     @app.exception_handler(GeocodingError)
     async def _geocoding(request: Request, exc: GeocodingError) -> JSONResponse:

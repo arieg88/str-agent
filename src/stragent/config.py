@@ -38,6 +38,8 @@ class CityConfig(BaseModel):
 class CompsConfig(BaseModel):
     default_room_type: str = "Entire home/apt"
     radius_steps_m: list[int] = Field(default_factory=lambda: [500, 1000, 1500])
+    min_radius_m: int = 100
+    max_radius_m: int = 5000
     min_comps: int = 10
     bedroom_tolerance: int = 1
     min_price: float = 10

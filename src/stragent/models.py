@@ -28,6 +28,7 @@ class CompFilters(BaseModel):
     bedrooms: int | None
     bedroom_tolerance: int
     radius_m: int
+    radius_mode: str = Field("auto", description="'auto' (widened as needed) or 'fixed'")
     radius_widened: bool
     min_comps_target: int
     min_reviews_ltm: int = Field(0, description="Minimum reviews in the last 12 months")
@@ -49,6 +50,7 @@ class Comp(BaseModel):
     price: float
     minimum_nights: int | None
     number_of_reviews_ltm: int | None
+    number_of_reviews: int | None = Field(None, description="Reviews since the listing started")
     review_scores_rating: float | None
     active_since: date | None = Field(
         None, description="Date of the first review: the listing was taking bookings by then"

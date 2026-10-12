@@ -117,3 +117,12 @@ def test_map_page_and_docs(client):
     page = client.get("/")
     assert page.status_code == 200 and "leaflet" in page.text
     assert client.get("/openapi.json").json()["info"]["title"] == "stragent"
+
+
+def test_radius_via_api(client):
+    r = client.post("/api/analyze", json={"lat": LAT, "lon": LON, "radius_m": 800})
+    assert r.status_code == 200 and r.json()["filters"]["radius_m"] == 800
+    s = client.get("/api/seasonality", params={"lat": LAT, "lon": LON, "radius_m": 800}).json()
+    assert s["filters"]["radius_m"] == 800
+    bad = client.post("/api/analyze", json={"lat": LAT, "lon": LON, "radius_m": 99_999})
+    assert bad.status_code == 422 and bad.json()["error"] == "invalid_radius"

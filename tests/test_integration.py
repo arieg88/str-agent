@@ -220,3 +220,45 @@ def test_drop_snapshot(tmp_path):
     assert left == [("2026-06-20",)] and snaps == [("2026-06-20",)] and cal == (0,)
     missing = runner.invoke(app, ["drop", "--snapshot", "2020-01-01", "--yes", "--db", str(path)])
     assert missing.exit_code == 1
+
+
+def test_fixed_radius(db, settings):
+    con = connect(db, read_only=True)
+    small = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), bedrooms=2, radius_m=200)
+    large = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), bedrooms=2, radius_m=2000)
+    con.close()
+    assert small.filters.radius_m == 200 and small.filters.radius_mode == "fixed"
+    assert not small.filters.radius_widened  # a fixed radius is never widened
+    assert all(c.distance_m <= 200 for c in small.comps)
+    assert large.comp_stats.count > small.comp_stats.count
+    assert large.market.total_listings > small.market.total_listings
+    if small.comp_stats.count < settings.comps.min_comps:
+        assert any("larger radius" in w for w in small.warnings)
+
+
+def test_radius_out_of_bounds(db, settings):
+    from stragent.analytics.comps import RadiusError
+
+    con = connect(db, read_only=True)
+    with pytest.raises(RadiusError):
+        analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), radius_m=50_000)
+    con.close()
+
+
+def test_total_reviews_reported(db, settings):
+    result = _run(db, settings, CENTRE)
+    assert all(c.number_of_reviews is not None for c in result.comps)
+    assert all((c.number_of_reviews or 0) >= (c.number_of_reviews_ltm or 0) for c in result.comps)
+
+
+def test_cli_radius(db):
+    result = CliRunner().invoke(
+        app, ["analyze", CENTRE, "--radius", "300", "--json", "--no-save", "--db", str(db)]
+    )
+    assert result.exit_code == 0, result.output
+    parsed = Analysis.model_validate(json.loads(result.output))
+    assert parsed.filters.radius_m == 300 and parsed.filters.radius_mode == "fixed"
+    bad = CliRunner().invoke(
+        app, ["analyze", CENTRE, "--radius", "10", "--no-save", "--db", str(db)]
+    )
+    assert bad.exit_code == 2 and "between" in bad.output
