@@ -1,0 +1,96 @@
+"""The analysis result contract. Later stages (API, LLM memo, agent) build on this schema."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class ValueRange(BaseModel):
+    p25: float
+    median: float
+    p75: float
+    n: int = Field(description="Number of listings the range is computed from")
+
+
+class Location(BaseModel):
+    query: str
+    latitude: float
+    longitude: float
+    display_name: str | None = None
+    neighbourhood: str | None = None
+    geocoder: str
+
+
+class CompFilters(BaseModel):
+    room_type: str
+    bedrooms: int | None
+    bedroom_tolerance: int
+    radius_m: int
+    radius_widened: bool
+    min_comps_target: int
+
+
+class Comp(BaseModel):
+    id: int
+    url: str
+    name: str | None
+    neighbourhood: str | None
+    distance_m: float
+    room_type: str | None
+    bedrooms: int | None
+    price: float
+    minimum_nights: int | None
+    number_of_reviews_ltm: int | None
+    review_scores_rating: float | None
+    est_occupancy: float
+    est_revenue: float | None
+
+
+class CompStats(BaseModel):
+    count: int
+    active_count: int = Field(description="Comps with at least one review in the last 12 months")
+    nightly_price: ValueRange | None
+    review_score_median: float | None
+    superhost_share: float | None
+    minimum_nights_median: float | None
+
+
+class RevenueEstimate(BaseModel):
+    method: str
+    assumptions: dict[str, float]
+    occupancy: ValueRange | None
+    occupied_nights: ValueRange | None
+    annual_revenue: ValueRange | None
+    capped_share: float | None = Field(
+        None, description="Share of active comps whose estimate hit the occupancy cap"
+    )
+    inside_airbnb_revenue: ValueRange | None = Field(
+        None, description="Inside Airbnb's own estimated_revenue_l365d, when the snapshot has it"
+    )
+
+
+class MarketStats(BaseModel):
+    radius_m: int
+    total_listings: int
+    entire_home_share: float | None
+    multi_listing_host_share: float | None = Field(
+        description="Share of listings run by hosts with several listings"
+    )
+    top3_hosts_share: float | None = Field(
+        description="Share of listings controlled by the three largest hosts in the area"
+    )
+    licensed_share: float | None
+
+
+class Analysis(BaseModel):
+    city: str
+    snapshot_date: str
+    currency: str
+    location: Location
+    filters: CompFilters
+    comp_stats: CompStats
+    revenue: RevenueEstimate
+    market: MarketStats
+    comps: list[Comp]
+    warnings: list[str] = Field(default_factory=list)
+    data_source: str = "Inside Airbnb (insideairbnb.com), CC BY 4.0"

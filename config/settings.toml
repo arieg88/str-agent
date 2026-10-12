@@ -1,0 +1,43 @@
+# All tunable assumptions live here, not in code.
+
+[paths]
+database = "data/stragent.duckdb"
+raw_dir = "data/raw"
+cache_dir = "data/cache"
+output_dir = "outputs"
+
+[cities.thessaloniki]
+display_name = "Thessaloniki"
+country_code = "gr"
+# Copy the exact path from https://insideairbnb.com/get-the-data/ (right-click a Thessaloniki
+# file link). {snapshot} is replaced by the snapshot date, e.g. 2026-09-25.
+base_url = "https://data.insideairbnb.com/greece/central-macedonia/thessaloniki/{snapshot}"
+currency = "EUR"
+# Rough bounding box used to bias geocoding: west, south, east, north
+viewbox = [22.85, 40.55, 23.05, 40.70]
+
+[comps]
+default_room_type = "Entire home/apt"
+radius_steps_m = [500, 1000, 1500]
+min_comps = 10
+bedroom_tolerance = 1
+# Ignore obviously broken prices (local currency per night)
+min_price = 10
+max_price = 2000
+
+[occupancy]
+# Review-based model as described on Inside Airbnb's "Data Assumptions" page.
+# Share of stays that leave a review.
+review_rate = 0.5
+# Assumed average stay in nights; a listing's minimum_nights is used instead when higher.
+average_stay_nights = 3.0
+# Occupancy is capped to avoid unrealistic estimates.
+max_occupancy = 0.70
+
+[market]
+# A host with at least this many listings counts as a multi-listing ("professional") host.
+multi_listing_threshold = 2
+
+[geocoding]
+user_agent = "stragent/0.1 (portfolio project)"
+min_interval_seconds = 1.1
