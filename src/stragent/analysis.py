@@ -11,7 +11,7 @@ from typing import Any
 import duckdb
 import pandas as pd
 
-from stragent.analytics.comps import comp_stats, market_stats, select_comps
+from stragent.analytics.comps import CompQuality, comp_stats, market_stats, select_comps
 from stragent.analytics.geo import NeighbourhoodIndex
 from stragent.analytics.geocode import Geocoder
 from stragent.analytics.revenue import (
@@ -22,7 +22,7 @@ from stragent.analytics.revenue import (
     percentile_range,
 )
 from stragent.config import OccupancyConfig, Settings
-from stragent.db import latest_snapshot
+from stragent.db import latest_snapshot, loaded_snapshots
 from stragent.models import Analysis, Comp, Location, RevenueEstimate, ValueRange
 
 LISTING_URL = "https://www.airbnb.com/rooms/{id}"
@@ -78,18 +78,34 @@ def analyze(
     bedrooms: int | None = None,
     room_type: str | None = None,
     max_comps_listed: int = 15,
+    quality: CompQuality | None = None,
+    snapshot: str | None = None,
 ) -> Analysis:
     city = settings.city(city_key)
-    snapshot = latest_snapshot(con, city_key)
     if snapshot is None:
-        raise NoDataError(f"No data loaded for {city.display_name}. Run `stragent ingest` first.")
+        snapshot = latest_snapshot(con, city_key)
+        if snapshot is None:
+            raise NoDataError(
+                f"No data loaded for {city.display_name}. Run `stragent ingest` first."
+            )
+    elif snapshot not in loaded_snapshots(con, city_key):
+        loaded = ", ".join(loaded_snapshots(con, city_key)) or "none"
+        raise NoDataError(f"Snapshot {snapshot} is not loaded. Loaded: {loaded}.")
 
     geo = geocoder.geocode(query)
     hood = _neighbourhoods(con, city_key, snapshot).lookup(geo.latitude, geo.longitude)
 
     room_type = room_type or settings.comps.default_room_type
     selection = select_comps(
-        con, city_key, snapshot, geo.latitude, geo.longitude, room_type, bedrooms, settings.comps
+        con,
+        city_key,
+        snapshot,
+        geo.latitude,
+        geo.longitude,
+        room_type,
+        bedrooms,
+        settings.comps,
+        quality,
     )
     if hood is None and selection.area.empty:
         raise OutOfAreaError(

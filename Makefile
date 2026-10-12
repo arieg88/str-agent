@@ -19,12 +19,12 @@ demo:  ## Build synthetic data, load it, run one analysis (no internet needed)
 	uv run stragent ingest --from-dir $(FIXTURE_DIR) --snapshot $(FIXTURE_SNAPSHOT)
 	uv run stragent analyze "$(ADDR)" --bedrooms $(BEDROOMS)
 
-ingest:  ## Download + load real data: make ingest SNAPSHOT=2026-09-25
+ingest:  ## Load real data: make ingest SNAPSHOT="2026-09-22 2026-06-20" (one or more dates)
 	@test -n "$(SNAPSHOT)" || (echo "Set SNAPSHOT=YYYY-MM-DD (see insideairbnb.com/get-the-data)"; exit 1)
-	uv run stragent ingest --city $(CITY) --snapshot $(SNAPSHOT)
+	uv run stragent ingest --city $(CITY) $(foreach s,$(SNAPSHOT),--snapshot $(s))
 
-analyze:  ## make analyze ADDR="Egnatia 120" BEDROOMS=2
-	uv run stragent analyze "$(ADDR)" --bedrooms $(BEDROOMS) --city $(CITY)
+analyze:  ## make analyze ADDR="Egnatia 120" BEDROOMS=2 ARGS="--min-reviews 5"
+	uv run stragent analyze "$(ADDR)" --bedrooms $(BEDROOMS) --city $(CITY) $(ARGS)
 
 snapshots:
 	uv run stragent snapshots

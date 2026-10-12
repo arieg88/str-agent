@@ -98,3 +98,10 @@ def connect(path: Path, read_only: bool = False) -> duckdb.DuckDBPyConnection:
 def latest_snapshot(con: duckdb.DuckDBPyConnection, city: str) -> str | None:
     row = con.execute("SELECT max(snapshot_date) FROM snapshots WHERE city = ?", [city]).fetchone()
     return None if row is None or row[0] is None else row[0].isoformat()
+
+
+def loaded_snapshots(con: duckdb.DuckDBPyConnection, city: str) -> list[str]:
+    rows = con.execute(
+        "SELECT snapshot_date FROM snapshots WHERE city = ? ORDER BY snapshot_date DESC", [city]
+    ).fetchall()
+    return [r[0].isoformat() for r in rows]

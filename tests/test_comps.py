@@ -55,3 +55,26 @@ def test_market_stats():
 def test_market_stats_empty():
     m = market_stats(_area().iloc[0:0], radius_m=500, cfg=MarketConfig())
     assert m.total_listings == 0 and m.entire_home_share is None
+
+
+def test_quality_filters():
+    from stragent.analytics.comps import CompQuality
+
+    area = _area()
+    cfg = CompsConfig()
+    by = lambda q: filter_comps(area, "Entire home/apt", None, cfg, q)["id"].tolist()  # noqa: E731
+    assert by(CompQuality(min_reviews_ltm=4)) == [1, 3]
+    assert by(CompQuality(min_rating=4.7)) == [1, 4]  # id 3 has no rating
+    assert by(CompQuality(max_minimum_nights=2)) == [1, 3, 4]
+    assert by(CompQuality(superhost_only=True)) == [1, 3]
+    assert by(CompQuality(min_reviews_ltm=1, min_rating=4.7)) == [1, 4]
+
+
+def test_quality_describe():
+    from stragent.analytics.comps import CompQuality
+
+    assert CompQuality().describe() == []
+    assert CompQuality(min_reviews_ltm=5, superhost_only=True).describe() == [
+        "≥5 reviews in 12m",
+        "superhosts only",
+    ]

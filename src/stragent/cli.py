@@ -20,9 +20,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 from stragent.analysis import NoDataError, OutOfAreaError, analyze
+from stragent.analytics.comps import CompQuality
 from stragent.analytics.geocode import GeocodingError, NominatimGeocoder
 from stragent.config import Settings, get_settings
 from stragent.data.fixtures import build_fixture
+from stragent.data.ingest import IngestReport
 from stragent.data.ingest import ingest as run_ingest
 from stragent.db import connect
 from stragent.models import Analysis, ValueRange
@@ -56,31 +58,52 @@ def fixtures(
 
 @app.command()
 def ingest(
-    snapshot: Annotated[str, typer.Option(help="Snapshot date, e.g. 2026-09-25")],
+    snapshot: Annotated[
+        list[str],
+        typer.Option(help="Snapshot date, e.g. 2026-09-22. Repeat to load several."),
+    ],
     city: CityOption = "thessaloniki",
     from_dir: Annotated[
         Path | None, typer.Option(help="Load files from a local directory instead of downloading")
     ] = None,
     db: DbOption = None,
 ) -> None:
-    """Download, clean and load one Inside Airbnb snapshot."""
+    """Download, clean and load one or more Inside Airbnb snapshots."""
     settings = get_settings()
     city_cfg = settings.city(city)
-    with console.status(f"Loading {city_cfg.display_name} {snapshot}…"):
-        con = connect(_db_path(settings, db))
-        try:
-            report = run_ingest(
-                con,
-                city.lower(),
-                city_cfg,
-                snapshot,
-                settings.resolve(settings.paths.raw_dir),
-                from_dir=from_dir,
-            )
-        finally:
-            con.close()
+    if from_dir is not None and len(snapshot) > 1:
+        console.print("[red]--from-dir loads one snapshot at a time.[/red]")
+        raise typer.Exit(1)
 
-    table = Table(title=f"Loaded {city_cfg.display_name} · {report.snapshot_date}")
+    failures: list[str] = []
+    con = connect(_db_path(settings, db))
+    try:
+        for snap in snapshot:
+            try:
+                with console.status(f"Loading {city_cfg.display_name} {snap}…"):
+                    report = run_ingest(
+                        con,
+                        city.lower(),
+                        city_cfg,
+                        snap,
+                        settings.resolve(settings.paths.raw_dir),
+                        from_dir=from_dir,
+                    )
+            except Exception as exc:  # keep going with the other snapshots
+                console.print(f"[red]{snap}: {exc}[/red]")
+                failures.append(snap)
+                continue
+            _print_report(city_cfg.display_name, report)
+    finally:
+        con.close()
+
+    if failures:
+        console.print(f"[red]Failed: {', '.join(failures)}[/red]")
+        raise typer.Exit(1)
+
+
+def _print_report(city_name: str, report: IngestReport) -> None:
+    table = Table(title=f"Loaded {city_name} · {report.snapshot_date}")
     table.add_column("Table")
     table.add_column("Rows", justify="right")
     for name, n in report.rows.items():
@@ -153,6 +176,14 @@ def render(result: Analysis) -> None:
         f"{result.comp_stats.count} × {f.room_type}, bedrooms {beds}, "
         f"within {f.radius_m} m ({result.comp_stats.active_count} active)",
     )
+    extra = CompQuality(
+        min_reviews_ltm=f.min_reviews_ltm,
+        min_rating=f.min_rating,
+        max_minimum_nights=f.max_minimum_nights,
+        superhost_only=f.superhost_only,
+    ).describe()
+    if extra:
+        summary.add_row("Comp filters", ", ".join(extra))
     summary.add_row(
         "Nightly price", _range(result.comp_stats.nightly_price, lambda v: _money(v, cur))
     )
@@ -222,12 +253,33 @@ def analyze_cmd(
     room_type: Annotated[
         str | None, typer.Option(help="Room type to compare against (default: Entire home/apt)")
     ] = None,
+    min_reviews: Annotated[
+        int, typer.Option(help="Only comps with at least this many reviews in the last 12 months")
+    ] = 0,
+    min_rating: Annotated[
+        float | None, typer.Option(help="Only comps with at least this review score (0-5)")
+    ] = None,
+    max_min_nights: Annotated[
+        int | None,
+        typer.Option(help="Only comps whose minimum stay is at most this (drops monthly rentals)"),
+    ] = None,
+    superhost_only: Annotated[bool, typer.Option(help="Only comps run by superhosts")] = False,
+    show: Annotated[int, typer.Option(help="How many comps to list in the table")] = 15,
+    snapshot: Annotated[
+        str | None, typer.Option(help="Snapshot date to use (default: latest loaded)")
+    ] = None,
     city: CityOption = "thessaloniki",
     as_json: Annotated[bool, typer.Option("--json", help="Print JSON instead of tables")] = False,
     save: Annotated[bool, typer.Option(help="Save the JSON result under outputs/")] = True,
     db: DbOption = None,
 ) -> None:
     """Comparable listings, market stats and a revenue range for an address."""
+    quality = CompQuality(
+        min_reviews_ltm=min_reviews,
+        min_rating=min_rating,
+        max_minimum_nights=max_min_nights,
+        superhost_only=superhost_only,
+    )
     settings = get_settings()
     path = _db_path(settings, db)
     if not path.exists():
@@ -242,7 +294,18 @@ def analyze_cmd(
     )
     con = connect(path, read_only=True)
     try:
-        result = analyze(con, settings, city_key, address, geocoder, bedrooms, room_type)
+        result = analyze(
+            con,
+            settings,
+            city_key,
+            address,
+            geocoder,
+            bedrooms,
+            room_type,
+            max_comps_listed=show,
+            quality=quality,
+            snapshot=snapshot,
+        )
     except (GeocodingError, OutOfAreaError, NoDataError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc

@@ -30,6 +30,21 @@ uv run stragent analyze "Egnatia 120" --bedrooms 2
 uv run stragent analyze "40.6326, 22.9416" --bedrooms 1 --json   # coordinates skip geocoding
 ```
 
+Load several quarters at once (find older dates under "show archived data"):
+
+```bash
+make ingest SNAPSHOT="2026-09-22 2026-06-20"
+uv run stragent snapshots                      # what's loaded
+uv run stragent analyze "Egnatia 120" --snapshot 2026-06-20   # default: latest
+```
+
+Narrow the comps (market stats always use every listing in the radius):
+
+```bash
+uv run stragent analyze "Egnatia 120" --bedrooms 2 \
+    --min-reviews 5 --min-rating 4.5 --max-min-nights 7 --superhost-only --show 30
+```
+
 Already downloaded the files? `uv run stragent ingest --from-dir path/to/files --snapshot 2026-09-25`.
 
 ## Example output (synthetic data)
@@ -78,7 +93,7 @@ src/stragent/
   analytics/revenue.py  occupancy and revenue model
   analysis.py        address → Analysis (the JSON contract)
   cli.py             `stragent` command
-tests/               52 tests: maths, cleaning, geocoding (mocked HTTP), end to end
+tests/               58 tests: maths, cleaning, geocoding (mocked HTTP), end to end
 ```
 
 ## Development

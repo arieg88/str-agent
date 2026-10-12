@@ -28,6 +28,10 @@ class CompFilters(BaseModel):
     radius_m: int
     radius_widened: bool
     min_comps_target: int
+    min_reviews_ltm: int = Field(0, description="Minimum reviews in the last 12 months")
+    min_rating: float | None = None
+    max_minimum_nights: int | None = None
+    superhost_only: bool = False
 
 
 class Comp(BaseModel):

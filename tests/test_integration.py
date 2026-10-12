@@ -117,3 +117,87 @@ def test_cli_outside_city_exit_code(db):
     result = CliRunner().invoke(app, ["analyze", ATHENS, "--no-save", "--db", str(db)])
     assert result.exit_code == 2
     assert "outside" in result.output
+
+
+def test_quality_filter_shrinks_comps(db, settings):
+    from stragent.analytics.comps import CompQuality
+
+    con = connect(db, read_only=True)
+    base = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), bedrooms=2)
+    strict = analyze(
+        con,
+        settings,
+        "thessaloniki",
+        CENTRE,
+        CoordsOnly(),
+        bedrooms=2,
+        quality=CompQuality(min_reviews_ltm=15),
+    )
+    con.close()
+    assert strict.filters.min_reviews_ltm == 15
+    assert all((c.number_of_reviews_ltm or 0) >= 15 for c in strict.comps)
+    # a stricter filter may need a wider radius to reach the target
+    assert strict.filters.radius_m >= base.filters.radius_m
+
+
+def test_multiple_snapshots_and_selection(tmp_path, settings):
+    src = build_fixture(tmp_path / "fx", n_listings=300, snapshot="2026-06-20")
+    path = tmp_path / "multi.duckdb"
+    for snap in ("2026-06-20", "2026-09-22"):
+        result = CliRunner().invoke(
+            app, ["ingest", "--snapshot", snap, "--from-dir", str(src), "--db", str(path)]
+        )
+        assert result.exit_code == 0, result.output
+    con = connect(path, read_only=True)
+    latest = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly())
+    older = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), snapshot="2026-06-20")
+    with pytest.raises(NoDataError, match="not loaded"):
+        analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), snapshot="2025-01-01")
+    con.close()
+    assert latest.snapshot_date == "2026-09-22"
+    assert older.snapshot_date == "2026-06-20"
+
+
+def test_cli_rejects_from_dir_with_several_snapshots(tmp_path):
+    result = CliRunner().invoke(
+        app,
+        [
+            "ingest",
+            "--snapshot",
+            "2026-06-20",
+            "--snapshot",
+            "2026-09-22",
+            "--from-dir",
+            "x",
+            "--db",
+            str(tmp_path / "x.duckdb"),
+        ],
+    )
+    assert result.exit_code == 1
+
+
+def test_cli_filters_and_show(db):
+    result = CliRunner().invoke(
+        app,
+        [
+            "analyze",
+            CENTRE,
+            "--bedrooms",
+            "2",
+            "--min-reviews",
+            "10",
+            "--max-min-nights",
+            "3",
+            "--show",
+            "5",
+            "--json",
+            "--no-save",
+            "--db",
+            str(db),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    parsed = Analysis.model_validate(json.loads(result.output))
+    assert len(parsed.comps) <= 5
+    assert parsed.filters.max_minimum_nights == 3
+    assert all((c.minimum_nights or 1) <= 3 for c in parsed.comps)

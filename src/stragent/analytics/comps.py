@@ -13,6 +13,28 @@ from stragent.config import CompsConfig, MarketConfig
 from stragent.models import CompFilters, CompStats, MarketStats, ValueRange
 
 
+@dataclass(frozen=True)
+class CompQuality:
+    """Optional quality filters applied to comps (not to the market stats)."""
+
+    min_reviews_ltm: int = 0
+    min_rating: float | None = None
+    max_minimum_nights: int | None = None
+    superhost_only: bool = False
+
+    def describe(self) -> list[str]:
+        parts = []
+        if self.min_reviews_ltm:
+            parts.append(f"≥{self.min_reviews_ltm} reviews in 12m")
+        if self.min_rating is not None:
+            parts.append(f"rating ≥{self.min_rating:g}")
+        if self.max_minimum_nights is not None:
+            parts.append(f"min stay ≤{self.max_minimum_nights} nights")
+        if self.superhost_only:
+            parts.append("superhosts only")
+        return parts
+
+
 @dataclass
 class CompSelection:
     comps: pd.DataFrame
@@ -60,7 +82,9 @@ def filter_comps(
     room_type: str,
     bedrooms: int | None,
     cfg: CompsConfig,
+    quality: CompQuality | None = None,
 ) -> pd.DataFrame:
+    q = quality or CompQuality()
     df = area[
         (area["room_type"] == room_type)
         & area["price"].notna()
@@ -70,6 +94,14 @@ def filter_comps(
         df = df[
             df["bedrooms"].notna() & (df["bedrooms"] - bedrooms).abs().le(cfg.bedroom_tolerance)
         ]
+    if q.min_reviews_ltm:
+        df = df[df["number_of_reviews_ltm"].fillna(0) >= q.min_reviews_ltm]
+    if q.min_rating is not None:
+        df = df[df["review_scores_rating"].notna() & (df["review_scores_rating"] >= q.min_rating)]
+    if q.max_minimum_nights is not None:
+        df = df[df["minimum_nights"].fillna(1) <= q.max_minimum_nights]
+    if q.superhost_only:
+        df = df[df["host_is_superhost"].fillna(False).astype(bool)]
     return df
 
 
@@ -82,6 +114,7 @@ def select_comps(
     room_type: str,
     bedrooms: int | None,
     cfg: CompsConfig,
+    quality: CompQuality | None = None,
 ) -> CompSelection:
     """Use the smallest radius step that yields ``min_comps``; otherwise the largest step."""
     steps = sorted(cfg.radius_steps_m)
@@ -89,13 +122,16 @@ def select_comps(
 
     chosen_radius = steps[-1]
     for radius in steps:
-        candidates = filter_comps(widest[widest["distance_m"] <= radius], room_type, bedrooms, cfg)
+        candidates = filter_comps(
+            widest[widest["distance_m"] <= radius], room_type, bedrooms, cfg, quality
+        )
         if len(candidates) >= cfg.min_comps:
             chosen_radius = radius
             break
 
     area = widest[widest["distance_m"] <= chosen_radius].reset_index(drop=True)
-    comps = filter_comps(area, room_type, bedrooms, cfg).reset_index(drop=True)
+    comps = filter_comps(area, room_type, bedrooms, cfg, quality).reset_index(drop=True)
+    q = quality or CompQuality()
     filters = CompFilters(
         room_type=room_type,
         bedrooms=bedrooms,
@@ -103,6 +139,10 @@ def select_comps(
         radius_m=chosen_radius,
         radius_widened=chosen_radius != steps[0],
         min_comps_target=cfg.min_comps,
+        min_reviews_ltm=q.min_reviews_ltm,
+        min_rating=q.min_rating,
+        max_minimum_nights=q.max_minimum_nights,
+        superhost_only=q.superhost_only,
     )
     return CompSelection(comps=comps, filters=filters, area=area)
 
