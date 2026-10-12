@@ -4,8 +4,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-data/
-outputs/
+/data/
+/outputs/
 *.duckdb
 *.duckdb.wal
 .env
