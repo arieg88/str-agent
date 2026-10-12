@@ -6,50 +6,15 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from conftest import ATHENS, CENTRE, KALAMARIA, SNAPSHOT, CoordsOnly
 from stragent.analysis import NoDataError, OutOfAreaError, analyze
-from stragent.analytics.geocode import parse_latlon
 from stragent.cli import app
-from stragent.config import load_settings
 from stragent.data.fixtures import build_fixture
 from stragent.data.ingest import ingest
 from stragent.db import connect
 from stragent.models import Analysis
 
 pytestmark = pytest.mark.integration
-
-SNAPSHOT = "2026-09-25"
-CENTRE = "40.6326, 22.9416"  # dense synthetic "Kentro"
-KALAMARIA = "40.585, 22.96"  # deliberately sparse
-ATHENS = "37.9838, 23.7275"
-
-
-class CoordsOnly:
-    """Offline geocoder for tests: accepts 'lat, lon' strings only."""
-
-    def geocode(self, query):
-        result = parse_latlon(query)
-        assert result is not None
-        return result
-
-
-@pytest.fixture(scope="module")
-def settings():
-    return load_settings()
-
-
-@pytest.fixture(scope="module")
-def db(tmp_path_factory, settings) -> Path:
-    root = tmp_path_factory.mktemp("stragent")
-    src = build_fixture(root / "fixture", n_listings=800, snapshot=SNAPSHOT)
-    path = root / "test.duckdb"
-    con = connect(path)
-    report = ingest(
-        con, "thessaloniki", settings.city("thessaloniki"), SNAPSHOT, root / "raw", from_dir=src
-    )
-    con.close()
-    assert report.rows["listings"] == 799  # one fixture row has no latitude
-    assert report.rows["neighbourhoods"] == 5
-    return path
 
 
 def _run(db: Path, settings, query: str, bedrooms=2) -> Analysis:
@@ -201,3 +166,57 @@ def test_cli_filters_and_show(db):
     assert len(parsed.comps) <= 5
     assert parsed.filters.max_minimum_nights == 3
     assert all((c.minimum_nights or 1) <= 3 for c in parsed.comps)
+
+
+def test_old_database_gets_new_columns(tmp_path):
+    """A database created before first_review/host_since existed is migrated on connect."""
+    path = tmp_path / "old.duckdb"
+    con = connect(path)
+    con.execute("ALTER TABLE listings DROP COLUMN first_review")
+    con.execute("ALTER TABLE listings DROP COLUMN host_since")
+    con.close()
+    con = connect(path)
+    cols = {r[0] for r in con.execute("DESCRIBE listings").fetchall()}
+    con.close()
+    assert {"first_review", "host_since"} <= cols
+
+
+def test_old_database_read_only_still_analyzes(tmp_path, settings):
+    """analyze and the API open the database read-only, so they can't migrate it."""
+    src = build_fixture(tmp_path / "fx", n_listings=300, snapshot=SNAPSHOT)
+    path = tmp_path / "old.duckdb"
+    con = connect(path)
+    ingest(
+        con, "thessaloniki", settings.city("thessaloniki"), SNAPSHOT, tmp_path / "raw", from_dir=src
+    )
+    con.execute("ALTER TABLE listings DROP COLUMN first_review")
+    con.execute("ALTER TABLE listings DROP COLUMN host_since")
+    con.close()
+
+    con = connect(path, read_only=True)
+    result = analyze(con, settings, "thessaloniki", CENTRE, CoordsOnly(), bedrooms=2)
+    con.close()
+    assert result.comps and all(c.active_since is None for c in result.comps)
+    assert any("Active since" in w for w in result.warnings)
+    assert result.market.new_listings_share is None
+
+
+def test_drop_snapshot(tmp_path):
+    src = build_fixture(tmp_path / "fx", n_listings=200, snapshot="2026-06-20")
+    path = tmp_path / "drop.duckdb"
+    runner = CliRunner()
+    for snap in ("2026-06-20", "2026-09-22"):
+        args = ["ingest", "--snapshot", snap, "--from-dir", str(src), "--db", str(path)]
+        assert runner.invoke(app, args).exit_code == 0
+    result = runner.invoke(app, ["drop", "--snapshot", "2026-09-22", "--yes", "--db", str(path)])
+    assert result.exit_code == 0, result.output
+    con = connect(path, read_only=True)
+    left = con.execute("SELECT DISTINCT snapshot_date::VARCHAR FROM listings").fetchall()
+    snaps = con.execute("SELECT snapshot_date::VARCHAR FROM snapshots").fetchall()
+    cal = con.execute(
+        "SELECT count(*) FROM calendar WHERE snapshot_date = DATE '2026-09-22'"
+    ).fetchone()
+    con.close()
+    assert left == [("2026-06-20",)] and snaps == [("2026-06-20",)] and cal == (0,)
+    missing = runner.invoke(app, ["drop", "--snapshot", "2020-01-01", "--yes", "--db", str(path)])
+    assert missing.exit_code == 1

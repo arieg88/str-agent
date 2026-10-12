@@ -13,6 +13,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "config" / "settings.toml"
 
 
+class UnknownCityError(ValueError):
+    pass
+
+
 class Paths(BaseModel):
     database: Path
     raw_dir: Path
@@ -68,7 +72,7 @@ class Settings(BaseModel):
             return self.cities[name.lower()]
         except KeyError as exc:
             known = ", ".join(sorted(self.cities))
-            raise ValueError(f"Unknown city '{name}'. Configured cities: {known}") from exc
+            raise UnknownCityError(f"Unknown city '{name}'. Configured cities: {known}") from exc
 
     def resolve(self, path: Path) -> Path:
         """Relative paths in the config are relative to the project root."""

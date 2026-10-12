@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 
@@ -39,6 +41,8 @@ class Comp(BaseModel):
     url: str
     name: str | None
     neighbourhood: str | None
+    latitude: float
+    longitude: float
     distance_m: float
     room_type: str | None
     bedrooms: int | None
@@ -46,6 +50,10 @@ class Comp(BaseModel):
     minimum_nights: int | None
     number_of_reviews_ltm: int | None
     review_scores_rating: float | None
+    active_since: date | None = Field(
+        None, description="Date of the first review: the listing was taking bookings by then"
+    )
+    host_since: date | None = Field(None, description="When the host joined Airbnb")
     est_occupancy: float
     est_revenue: float | None
 
@@ -84,6 +92,11 @@ class MarketStats(BaseModel):
         description="Share of listings controlled by the three largest hosts in the area"
     )
     licensed_share: float | None
+    new_listings_share: float | None = Field(
+        None,
+        description="Share of reviewed listings whose first review is within 12 months of the "
+        "snapshot: a sign of new supply",
+    )
 
 
 class Analysis(BaseModel):
@@ -98,3 +111,36 @@ class Analysis(BaseModel):
     comps: list[Comp]
     warnings: list[str] = Field(default_factory=list)
     data_source: str = "Inside Airbnb (insideairbnb.com), CC BY 4.0"
+
+
+class CalendarMonth(BaseModel):
+    month: str = Field(description="YYYY-MM")
+    nights: int = Field(description="Listing-nights in this month covered by the calendar")
+    unavailable_share: float = Field(
+        description="Share of nights not open for booking: booked OR blocked by the host"
+    )
+    avg_calendar_price: float | None = None
+
+
+class ReviewMonth(BaseModel):
+    month: str = Field(description="YYYY-MM")
+    reviews: int
+    reviews_per_listing: float
+
+
+class Seasonality(BaseModel):
+    city: str
+    snapshot_date: str
+    location: Location
+    filters: CompFilters
+    listing_count: int = Field(description="Comps the series are computed from")
+    calendar_listing_count: int = Field(
+        description="Comps used for the calendar series (fully blocked calendars excluded)"
+    )
+    forward_calendar: list[CalendarMonth] = Field(
+        description="The 12 months after the snapshot, from each listing's calendar"
+    )
+    review_history: list[ReviewMonth] = Field(
+        description="Reviews posted per month before the snapshot: a lagging demand signal"
+    )
+    notes: list[str] = Field(default_factory=list)

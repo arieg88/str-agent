@@ -26,7 +26,7 @@ from stragent.config import Settings, get_settings
 from stragent.data.fixtures import build_fixture
 from stragent.data.ingest import IngestReport
 from stragent.data.ingest import ingest as run_ingest
-from stragent.db import connect
+from stragent.db import connect, delete_snapshot, loaded_snapshots
 from stragent.models import Analysis, ValueRange
 
 app = typer.Typer(
@@ -134,8 +134,40 @@ def snapshots(db: DbOption = None) -> None:
     for col in ("City", "Snapshot", "Listings", "Calendar", "Reviews", "Source"):
         table.add_column(col)
     for city, snap, n_l, n_c, n_r, source in rows:
-        table.add_row(city, str(snap), f"{n_l:,}", f"{n_c:,}", f"{n_r:,}", source)
+        label = f"{source} [yellow](synthetic)[/yellow]" if "fixtures" in source else source
+        table.add_row(city, str(snap), f"{n_l:,}", f"{n_c:,}", f"{n_r:,}", label)
     console.print(table)
+
+
+@app.command()
+def drop(
+    snapshot: Annotated[str, typer.Option(help="Snapshot date to remove, e.g. 2026-09-25")],
+    city: CityOption = "thessaloniki",
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Don't ask for confirmation")] = False,
+    db: DbOption = None,
+) -> None:
+    """Remove one snapshot from the database (raw downloaded files are kept)."""
+    settings = get_settings()
+    path = _db_path(settings, db)
+    if not path.exists():
+        console.print("[yellow]No database yet.[/yellow]")
+        raise typer.Exit(1)
+    con = connect(path)
+    try:
+        loaded = loaded_snapshots(con, city.lower())
+        if snapshot not in loaded:
+            listed = ", ".join(loaded) or "none"
+            console.print(f"[red]Snapshot {snapshot} is not loaded. Loaded: {listed}[/red]")
+            raise typer.Exit(1)
+        if not yes:
+            typer.confirm(f"Remove {city} snapshot {snapshot} from {path}?", abort=True)
+        deleted = delete_snapshot(con, city.lower(), snapshot)
+    finally:
+        con.close()
+    console.print(
+        f"Removed {snapshot}: {deleted['listings']:,} listings, "
+        f"{deleted['calendar']:,} calendar rows, {deleted['reviews']:,} reviews."
+    )
 
 
 def _money(value: float, currency: str) -> str:
@@ -210,6 +242,7 @@ def render(result: Analysis) -> None:
     market.add_row("Run by multi-listing hosts", _pct(m.multi_listing_host_share))
     market.add_row("Held by top 3 hosts", _pct(m.top3_hosts_share))
     market.add_row("Show a licence number", _pct(m.licensed_share))
+    market.add_row("First reviewed in last 12 months", _pct(m.new_listings_share))
     console.print(market)
 
     comps = Table(title=f"Nearest comps (showing {len(result.comps)})")
@@ -220,6 +253,7 @@ def render(result: Analysis) -> None:
         ("Reviews 12m", "right"),
         ("Rating", "right"),
         ("Est. revenue", "right"),
+        ("Active since", "right"),
         ("Listing", "left"),
     ]:
         comps.add_column(col, justify=justify)  # type: ignore[arg-type]
@@ -231,6 +265,7 @@ def render(result: Analysis) -> None:
             "-" if c.number_of_reviews_ltm is None else str(c.number_of_reviews_ltm),
             "-" if c.review_scores_rating is None else f"{c.review_scores_rating:.2f}",
             "-" if c.est_revenue is None else _money(c.est_revenue, cur),
+            "-" if c.active_since is None else c.active_since.strftime("%Y-%m"),
             c.url,
         )
     console.print(comps)
@@ -238,7 +273,8 @@ def render(result: Analysis) -> None:
     console.print(
         f"[dim]Occupancy model: reviews ÷ {a['review_rate']:.0%} review rate × "
         f"max({a['average_stay_nights']:.0f}, minimum nights), capped at "
-        f"{a['max_occupancy']:.0%}. Estimates, not bookings. {result.data_source}.[/dim]"
+        f"{a['max_occupancy']:.0%}. Estimates, not bookings. "
+        f"'Active since' = first review date. {result.data_source}.[/dim]"
     )
 
 
@@ -290,7 +326,7 @@ def analyze_cmd(
     geocoder = NominatimGeocoder(
         settings.city(city_key),
         settings.geocoding,
-        settings.resolve(settings.paths.cache_dir) / "geocode.json",
+        settings.resolve(settings.paths.cache_dir) / f"geocode-{city_key}.json",
     )
     con = connect(path, read_only=True)
     try:
@@ -324,6 +360,28 @@ def analyze_cmd(
         render(result)
         if save:
             console.print(f"[dim]Saved {out_file}[/dim]")
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Interface to bind; 0.0.0.0 inside Docker")] = (
+        "127.0.0.1"
+    ),
+    port: Annotated[int, typer.Option(help="Port")] = 8000,
+    reload: Annotated[bool, typer.Option(help="Restart on code changes (development)")] = False,
+    db: DbOption = None,
+) -> None:
+    """Run the HTTP API and map page (http://HOST:PORT/, docs at /docs)."""
+    import logging
+    import os
+
+    import uvicorn
+
+    if db is not None:
+        os.environ["STRAGENT_DB_PATH"] = str(db.resolve())
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    console.print(f"Map page: http://{host}:{port}/   API docs: http://{host}:{port}/docs")
+    uvicorn.run("stragent.api.app:create_app", factory=True, host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import pandas as pd
 from stragent.analytics.geo import HAVERSINE_SQL, bounding_box
 from stragent.analytics.revenue import percentile_range
 from stragent.config import CompsConfig, MarketConfig
+from stragent.db import LATER_LISTING_COLUMNS
 from stragent.models import CompFilters, CompStats, MarketStats, ValueRange
 
 
@@ -74,7 +75,12 @@ def listings_within(
         "max_lon": max_lon,
         "radius": radius_m,
     }
-    return con.execute(sql, params).df()
+    df = con.execute(sql, params).df()
+    # A database created before these columns existed, opened read-only, won't have them yet.
+    for col in LATER_LISTING_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NaT
+    return df
 
 
 def filter_comps(
@@ -171,7 +177,9 @@ def comp_stats(comps: pd.DataFrame) -> CompStats:
     )
 
 
-def market_stats(area: pd.DataFrame, radius_m: int, cfg: MarketConfig) -> MarketStats:
+def market_stats(
+    area: pd.DataFrame, radius_m: int, cfg: MarketConfig, snapshot: str | None = None
+) -> MarketStats:
     total = len(area)
     if total == 0:
         return MarketStats(
@@ -181,10 +189,17 @@ def market_stats(area: pd.DataFrame, radius_m: int, cfg: MarketConfig) -> Market
             multi_listing_host_share=None,
             top3_hosts_share=None,
             licensed_share=None,
+            new_listings_share=None,
         )
     host_counts = area["calculated_host_listings_count"].fillna(1)
     top3 = area["host_id"].value_counts().head(3).sum()
     licensed = area["license"].fillna("").astype(str).str.strip().ne("")
+    new_share = None
+    if snapshot is not None and "first_review" in area:
+        first = pd.to_datetime(area["first_review"], errors="coerce").dropna()
+        if not first.empty:
+            cutoff = pd.Timestamp(snapshot) - pd.Timedelta(days=365)
+            new_share = float((first >= cutoff).mean())
     return MarketStats(
         radius_m=radius_m,
         total_listings=total,
@@ -192,4 +207,5 @@ def market_stats(area: pd.DataFrame, radius_m: int, cfg: MarketConfig) -> Market
         multi_listing_host_share=_share(host_counts >= cfg.multi_listing_threshold),
         top3_hosts_share=float(top3 / total),
         licensed_share=_share(licensed),
+        new_listings_share=new_share,
     )

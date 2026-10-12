@@ -33,7 +33,9 @@ LISTING_COLUMNS = [
     "number_of_reviews_ltm",
     "reviews_per_month",
     "review_scores_rating",
+    "first_review",
     "last_review",
+    "host_since",
     "license",
     "instant_bookable",
     "estimated_occupancy_l365d",
@@ -119,7 +121,8 @@ def clean_listings(raw: pd.DataFrame) -> pd.DataFrame:
     for col in FLOAT_COLUMNS:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Float64")
     df["estimated_revenue_l365d"] = df["estimated_revenue_l365d"].astype("Float64")
-    df["last_review"] = pd.to_datetime(df["last_review"], errors="coerce").dt.date
+    for col in ("first_review", "last_review", "host_since"):
+        df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
     for col in ("name", "neighbourhood", "property_type", "room_type", "license"):
         df[col] = df[col].astype("string").str.strip()
 

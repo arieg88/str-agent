@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Leading slash = only at the project root (not src/stragent/data/)
 /data/
 /outputs/
 *.duckdb

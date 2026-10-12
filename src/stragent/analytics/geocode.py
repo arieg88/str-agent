@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -64,6 +65,9 @@ class NominatimGeocoder:
         self._client = client
         self._last_request = 0.0
         self._cache: dict[str, dict] = {}
+        # The API serves requests from several threads; one lock keeps the cache file and
+        # the 1-request-per-second throttle consistent.
+        self._lock = threading.Lock()
         if cache_path.exists():
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
 
@@ -81,7 +85,10 @@ class NominatimGeocoder:
         direct = parse_latlon(query)
         if direct:
             return direct
+        with self._lock:
+            return self._geocode(query)
 
+    def _geocode(self, query: str) -> GeocodeResult:
         key = f"{self.city.display_name}|{query.strip().lower()}"
         if key in self._cache:
             return GeocodeResult(**{**self._cache[key], "source": "nominatim (cached)"})

@@ -25,6 +25,9 @@ Re-loading a snapshot replaces its rows.
 - Duplicate listing ids keep the last row.
 - Columns missing from older snapshots are created as empty rather than failing.
 - `neighbourhood` comes from `neighbourhood_cleansed`.
+- `first_review` and `host_since` are kept as dates. Databases created before they existed get
+  the columns added automatically; re-run `stragent ingest --snapshot <date>` to fill them (raw
+  files are cached, so nothing is downloaded again).
 
 ## Known quirks
 

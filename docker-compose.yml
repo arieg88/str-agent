@@ -1,0 +1,13 @@
+# docker compose up --build                     -> http://localhost:8000
+# docker compose run --rm api stragent ingest --snapshot 2026-09-22
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Identify yourself to OpenStreetMap's geocoder (usage policy)
+      STRAGENT_CONTACT_EMAIL: ${STRAGENT_CONTACT_EMAIL:-}
+    restart: unless-stopped

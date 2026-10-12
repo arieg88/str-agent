@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS listings (
     number_of_reviews_ltm INTEGER,
     reviews_per_month DOUBLE,
     review_scores_rating DOUBLE,
+    first_review    DATE,
     last_review     DATE,
+    host_since      DATE,
     license         VARCHAR,
     instant_bookable BOOLEAN,
     estimated_occupancy_l365d INTEGER,
@@ -83,6 +85,16 @@ CREATE TABLE IF NOT EXISTS neighbourhoods (
 );
 """
 
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS does not add columns to an
+# existing table, so these run on every writable connect. Re-ingest a snapshot to fill them
+# (raw files are cached, so nothing is downloaded again).
+# Read-only connections (analyze, the API) can't run these, so readers must also tolerate the
+# columns being absent: see LATER_LISTING_COLUMNS.
+LATER_LISTING_COLUMNS = ("first_review", "host_since")
+MIGRATIONS = tuple(
+    f"ALTER TABLE listings ADD COLUMN IF NOT EXISTS {col} DATE" for col in LATER_LISTING_COLUMNS
+)
+
 TABLES = ("listings", "calendar", "reviews", "neighbourhoods")
 
 
@@ -92,6 +104,8 @@ def connect(path: Path, read_only: bool = False) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(str(path), read_only=read_only)
     if not read_only:
         con.execute(SCHEMA)
+        for statement in MIGRATIONS:
+            con.execute(statement)
     return con
 
 
@@ -105,3 +119,25 @@ def loaded_snapshots(con: duckdb.DuckDBPyConnection, city: str) -> list[str]:
         "SELECT snapshot_date FROM snapshots WHERE city = ? ORDER BY snapshot_date DESC", [city]
     ).fetchall()
     return [r[0].isoformat() for r in rows]
+
+
+def delete_snapshot(con: duckdb.DuckDBPyConnection, city: str, snapshot: str) -> dict[str, int]:
+    """Remove one snapshot from every table. Returns rows deleted per table."""
+    deleted: dict[str, int] = {}
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for table in (*TABLES, "snapshots"):
+            row = con.execute(
+                f"SELECT count(*) FROM {table} WHERE city = ? AND snapshot_date = CAST(? AS DATE)",
+                [city, snapshot],
+            ).fetchone()
+            deleted[table] = int(row[0]) if row else 0
+            con.execute(
+                f"DELETE FROM {table} WHERE city = ? AND snapshot_date = CAST(? AS DATE)",
+                [city, snapshot],
+            )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return deleted
