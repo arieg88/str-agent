@@ -50,6 +50,10 @@ uv run stragent snapshots / drop --snapshot DATE
 - Map page modules import one way: `main` -> `api`, `map`, `render`; `render` -> `charts`; all ->
   `dom`. `render.js` must not import `map.js` (pass callbacks from `main.js`). `L` is the only
   global and only `map.js` uses it. Asset URLs are absolute (`/static/...`).
+- Map page links built from data go through `httpsUrl()` in `dom.js` (`el()` drops any other
+  `href`). CDN tags are version-pinned with `integrity` hashes; update the hash with the version.
+- Map page unit tests live in `tests/js/*.test.mjs` (Node's built-in runner, no npm packages).
+  `tests/test_frontend.py` runs them inside `make check` and skips them if Node is missing.
 
 ## Frontend structure
 Plain ES modules served by FastAPI from `src/stragent/api/static/`, no framework and no build

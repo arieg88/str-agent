@@ -34,6 +34,14 @@ def test_health_without_database(settings, tmp_path):
     }
 
 
+def test_snapshots_without_database_is_no_data(settings, tmp_path):
+    # the map page shows its "run ingest first" hint on this code, and only on this code
+    app = create_app(settings=settings, db_path=tmp_path / "missing.duckdb")
+    r = TestClient(app).get("/api/snapshots")
+    assert r.status_code == 404
+    assert r.json()["error"] == "no_data" and r.json()["request_id"]
+
+
 def test_analyze_by_coordinates(client):
     r = client.post("/api/analyze", json={"lat": LAT, "lon": LON, "bedrooms": 2, "show": 5})
     assert r.status_code == 200

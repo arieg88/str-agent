@@ -1,9 +1,25 @@
-/* Calls to the stragent API. Errors carry the API's "detail" message. */
+/* Calls to the stragent API. */
+
+/* The API's error shape {error, detail, request_id}: message is the detail, code the error.
+   code is "network" when the server could not be reached at all. */
+export class ApiError extends Error {
+  constructor(detail, code, requestId) {
+    super(detail);
+    this.name = "ApiError";
+    this.code = code;
+    this.requestId = requestId;
+  }
+}
 
 async function api(path, opts) {
-  const res = await fetch(path, opts);
+  let res;
+  try { res = await fetch(path, opts); }
+  catch { throw new ApiError("Cannot reach the server. Is it running?", "network", null); }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.detail || res.statusText);
+  if (!res.ok) {
+    throw new ApiError(body.detail || res.statusText, body.error || "http_error",
+      body.request_id || res.headers.get("x-request-id"));
+  }
   return body;
 }
 

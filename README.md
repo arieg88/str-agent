@@ -141,7 +141,8 @@ src/stragent/
   api/app.py         FastAPI factory: middleware, error handlers, static page
   api/routes.py      endpoints (thin wrappers around analysis.py)
   api/static/        map page: index.html (layout), css/app.css, js/*.js (ES modules, no build step)
-tests/               81 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
+tests/               84 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
+tests/js/            map page unit tests, run by pytest through `node --test` (skipped without Node)
 ```
 
 ## Development

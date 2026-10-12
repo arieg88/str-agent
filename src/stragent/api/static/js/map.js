@@ -1,5 +1,5 @@
 /* The Leaflet map: neighbourhood layer, pin, radius circle and comp markers. */
-import { css, el, eur } from "./dom.js";
+import { css, el, eur, httpsUrl } from "./dom.js";
 
 const L = globalThis.L;   // loaded from the CDN by index.html, the page's only global
 
@@ -33,13 +33,21 @@ function popup(c) {
     el("b", { text: eur(c.price) + " / night" }), el("br"),
     `${c.bedrooms ?? "?"} bd · ${c.number_of_reviews_ltm ?? 0} reviews in 12 m (${c.number_of_reviews ?? 0} total) · rating ${c.review_scores_rating ?? "–"}`, el("br"),
     `Est. revenue ${eur(c.est_revenue)} · active since ${c.active_since ? c.active_since.slice(0, 7) : "–"}`, el("br"),
-    el("a", { href: c.url, target: "_blank", rel: "noopener", text: "Open on Airbnb" }));
+    httpsUrl(c.url) ? el("a", { href: c.url, target: "_blank", rel: "noopener", text: "Open on Airbnb" }) : "");
 }
 
-/* Draw the pin, the radius circle and the comps; returns the price quartile cuts for the legend. */
-export function showResult(loc, radiusM, comps) {
+/* Remove the pin, the radius circle and the comps. */
+export function clearResult() {
   if (layers.pin) map.removeLayer(layers.pin);
   if (layers.circle) map.removeLayer(layers.circle);
+  layers.pin = layers.circle = null;
+  layers.comps.clearLayers(); markersById.clear();
+}
+
+/* Draw the pin, the radius circle and the comps; returns the price quartile cuts for the legend
+   (null when there are no comps). */
+export function showResult(loc, radiusM, comps) {
+  clearResult();
   layers.circle = L.circle([loc.latitude, loc.longitude], {
     radius: radiusM, color: css("--text-secondary"), weight: 1, dashArray: "4 4", fill: false,
   }).addTo(map);
@@ -49,9 +57,8 @@ export function showResult(loc, radiusM, comps) {
   map.fitBounds(layers.circle.getBounds(), { padding: [20, 20] });
 
   // comps coloured by price quartile (ordinal blue ramp), 2px surface ring
-  layers.comps.clearLayers(); markersById.clear();
-  const prices = comps.map((c) => c.price);
-  const cuts = prices.length ? quartiles(prices) : [0, 0, 0];
+  if (!comps.length) return null;
+  const cuts = quartiles(comps.map((c) => c.price));
   const qColor = (p) => css(p <= cuts[0] ? "--q1" : p <= cuts[1] ? "--q2" : p <= cuts[2] ? "--q3" : "--q4");
   for (const c of comps) {
     const m = L.circleMarker([c.latitude, c.longitude], {

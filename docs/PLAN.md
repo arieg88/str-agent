@@ -13,6 +13,10 @@ This is the original plan. Where the build differs, this section wins.
   split into `index.html` (layout), `css/app.css` and ES modules in `js/` (see CLAUDE.md,
   "Frontend structure"). `make lint-js` runs Biome on it through npx (optional, not in `make check`
   or CI).
+  Hardened after the split: links from data must be `https://`, a newer search always wins over
+  an older one still in flight, errors show the request id, a failed search clears the old
+  result, startup errors say what actually failed, no price legend without comps, and the
+  Leaflet CDN tags carry integrity hashes.
 - **Next:** Stage 3.
 - **Known follow-ups on the map page:**
   - Dark mode gaps: `.error` is a hard-coded `#b3261e`, and map and chart colours are read once

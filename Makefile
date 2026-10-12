@@ -49,8 +49,8 @@ lint:
 	uv run ruff check src tests
 	uv run ruff format --check src tests
 
-lint-js:  ## Optional: lint the map page's JS and CSS with Biome (not part of check or CI)
-	$(BIOME) lint src/stragent/api/static
+lint-js:  ## Optional: lint the map page's JS and CSS and its JS tests with Biome (not part of check or CI)
+	$(BIOME) lint src/stragent/api/static tests/js
 
 typecheck:
 	uv run mypy src

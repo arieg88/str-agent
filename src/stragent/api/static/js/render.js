@@ -9,7 +9,7 @@ function kpi(label, range, fmt) {
     el("div", { class: "r", text: range ? `${fmt(range.p25)} – ${fmt(range.p75)}` : "" }));
 }
 
-/* cuts: the price quartile cuts used to colour the comp markers, for the legend. */
+/* cuts: the price quartile cuts used to colour the comp markers, for the legend (null: no comps). */
 export function renderSummary(a, cuts) {
   const box = $("summary"); box.replaceChildren();
   const f = a.filters, loc = a.location;
@@ -27,6 +27,7 @@ export function renderSummary(a, cuts) {
     text: "Median with 25th–75th percentile across comps with recent reviews. Occupancy is inferred from reviews (review rate " +
       pct(a.revenue.assumptions.review_rate) + ", cap " + pct(a.revenue.assumptions.max_occupancy) + ")." }));
   const legend = el("div", { class: "legend" }, el("span", {}, el("i", { style: "background:" + css("--accent") }), "Your flat"));
+  if (!cuts) { box.append(legend); return; }
   const labels = [`≤ ${eur(cuts[0])}`, `≤ ${eur(cuts[1])}`, `≤ ${eur(cuts[2])}`, `> ${eur(cuts[2])}`];
   ["--q1", "--q2", "--q3", "--q4"].forEach((v, i) => {
     legend.append(el("span", {}, el("i", { style: "background:" + css(v) }), labels[i]));
