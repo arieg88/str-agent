@@ -113,6 +113,9 @@ class Analysis(BaseModel):
     market: MarketStats
     comps: list[Comp]
     warnings: list[str] = Field(default_factory=list)
+    warning_codes: list[str] = Field(
+        default_factory=list, description="A fixed code per warning, in the same order"
+    )
     data_source: str = "Inside Airbnb (insideairbnb.com), CC BY 4.0"
 
 
@@ -200,3 +203,32 @@ class MemoValidation(BaseModel):
     problems: list[MemoProblem] = Field(default_factory=list)
     numbers_checked: int = 0
     facts_cited: list[str] = Field(default_factory=list)
+
+
+class LLMUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class Memo(BaseModel):
+    """An LLM-written memo over one Analysis. verified=False means some number did not check out
+    (problems says which); it is still returned, never hidden."""
+
+    sections: MemoSections
+    markdown: str
+    verified: bool
+    problems: list[MemoProblem] = Field(default_factory=list)
+    facts: list[Fact]
+    facts_hash: str
+    snapshot_date: str
+    attempts: int = Field(description="Model calls made: 1, or 2 after a regeneration")
+    provider: str
+    model: str
+    prompt_version: str
+    usage: LLMUsage = Field(description="Summed over attempts (the original ones on a cache hit)")
+    latency_ms: int = Field(description="Time spent in model calls (the original on a cache hit)")
+    estimated_cost_usd: float | None = Field(
+        None, description="From the prices in settings.toml; None when the model has no price"
+    )
+    cached: bool = False
+    notes: list[str] = Field(default_factory=list)

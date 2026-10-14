@@ -24,10 +24,16 @@ This is the original plan. Where the build differs, this section wins.
     (`[F17]` is always the median nightly price; inputs and a derived monthly revenue included),
     and `llm/validate.py` checks that every number in a memo is a correctly cited fact. The
     validator's rules are the docstring of `validate.py`. No LLM yet.
-  - **Next: 3b** provider layer (`anthropic` and `openai_compatible`, plus a scripted fake),
-    memo flow (generate, validate, regenerate once), prompt file, disk cache and `stragent memo`.
-    Then 3c (API + map page) and 3d (golden set, `stragent eval-memo`).
-  - Decided for Stage 3: default model `claude-sonnet-5-5`; no streaming (the memo is validated
+  - **3b done:** provider layer (`anthropic`, `openai_compatible` for OpenAI/Ollama/vLLM, and a
+    scripted fake), `memo.py` (generate, validate, regenerate once, overall deadline), prompt
+    file `prompts/memo/v1.md`, disk cache of verified memos (re-validated on every hit), and
+    `stragent memo`. Cost is estimated from `[llm.prices]` in settings.toml (null if unpriced).
+    Anthropic is called with `messages.create` + `output_config.format`, not `messages.parse`,
+    because parse validates the JSON before the stop reason (refusal, max_tokens) can be read.
+  - **Next: 3c** `POST /api/memo` and the map page memo panel, then 3d (golden set,
+    `stragent eval-memo`).
+  - Decided for Stage 3: default model `claude-sonnet-5-5` (Haiku for development, Opus kept
+    for the Stage 6 comparison); no refusal-fallback beta (a refusal is `llm_error`); no streaming (the memo is validated
     whole before it is shown as verified; revisit with the Stage 5 chat); seasonality is not in
     the memo facts yet; the validator checks numbers, not wording ("higher than" is unchecked
     until the Stage 6 judge).

@@ -7,6 +7,10 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    # API keys for the memo (see .env.example); the file is optional
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Identify yourself to OpenStreetMap's geocoder (usage policy)
       STRAGENT_CONTACT_EMAIL: ${STRAGENT_CONTACT_EMAIL:-}

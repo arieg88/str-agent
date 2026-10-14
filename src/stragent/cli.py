@@ -4,11 +4,13 @@ stragent fixtures                      # build a synthetic snapshot for offline 
 stragent ingest --snapshot 2026-09-25  # download + load the real Thessaloniki data
 stragent snapshots                     # what's loaded
 stragent analyze "Egnatia 120" --bedrooms 2
+stragent memo "Egnatia 120" --bedrooms 2   # LLM-written memo, every number checked
 """
 
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -16,23 +18,40 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
 from stragent.analysis import NoDataError, OutOfAreaError, analyze
 from stragent.analytics.comps import CompQuality, RadiusError
 from stragent.analytics.geocode import GeocodingError, NominatimGeocoder
-from stragent.config import Settings, get_settings
+from stragent.config import Settings, get_settings, load_env
 from stragent.data.fixtures import build_fixture
 from stragent.data.ingest import IngestReport
 from stragent.data.ingest import ingest as run_ingest
 from stragent.db import connect, delete_snapshot, loaded_snapshots
-from stragent.models import Analysis, ValueRange
+from stragent.llm.provider import LLMError, LLMUnavailableError, Provider, make_provider
+from stragent.memo import write_memo
+from stragent.models import Analysis, Memo, ValueRange
 
 app = typer.Typer(
     help="Short-term-rental analyst built on Inside Airbnb data.", no_args_is_help=True
 )
 console = Console()
+
+
+def _configured_provider(settings: Settings) -> Provider:
+    return make_provider(settings.llm)
+
+
+# Tests replace this to run `stragent memo` with a scripted provider.
+provider_factory: Callable[[Settings], Provider] = _configured_provider
+
+
+@app.callback()
+def _startup() -> None:
+    load_env()
+
 
 DbOption = Annotated[Path | None, typer.Option("--db", help="DuckDB file (default from config)")]
 CityOption = Annotated[str, typer.Option("--city", help="City key from config/settings.toml")]
@@ -317,13 +336,48 @@ def analyze_cmd(
     db: DbOption = None,
 ) -> None:
     """Comparable listings, market stats and a revenue range for an address."""
+    settings = get_settings()
+    result = _run_analysis(
+        settings, address, bedrooms, room_type, min_reviews, min_rating, max_min_nights,
+        superhost_only, radius, show, snapshot, city, db,
+    )  # fmt: skip
+
+    payload = result.model_dump_json(indent=2)
+    if save:
+        out_dir = settings.resolve(settings.paths.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = out_dir / f"{date.today().isoformat()}-{_slug(address)}.json"
+        out_file.write_text(payload, encoding="utf-8")
+    if as_json:
+        print(payload)
+    else:
+        render(result)
+        if save:
+            console.print(f"[dim]Saved {out_file}[/dim]")
+
+
+def _run_analysis(
+    settings: Settings,
+    address: str,
+    bedrooms: int | None,
+    room_type: str | None,
+    min_reviews: int,
+    min_rating: float | None,
+    max_min_nights: int | None,
+    superhost_only: bool,
+    radius: int | None,
+    show: int,
+    snapshot: str | None,
+    city: str,
+    db: Path | None,
+) -> Analysis:
+    """Shared by `analyze` and `memo`: exits with a message on the usual user errors."""
     quality = CompQuality(
         min_reviews_ltm=min_reviews,
         min_rating=min_rating,
         max_minimum_nights=max_min_nights,
         superhost_only=superhost_only,
     )
-    settings = get_settings()
     path = _db_path(settings, db)
     if not path.exists():
         console.print("[red]No database yet. Run `stragent ingest` (or `make demo`) first.[/red]")
@@ -355,19 +409,94 @@ def analyze_cmd(
         raise typer.Exit(2) from exc
     finally:
         con.close()
+    return result
 
-    payload = result.model_dump_json(indent=2)
-    if save:
-        out_dir = settings.resolve(settings.paths.output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = out_dir / f"{date.today().isoformat()}-{_slug(address)}.json"
-        out_file.write_text(payload, encoding="utf-8")
-    if as_json:
-        print(payload)
+
+def render_memo(memo: Memo) -> None:
+    # model output and problem details contain [F17]-style tags: never read them as rich markup
+    console.print(memo.markdown, markup=False)
+    console.print()
+    if memo.verified:
+        console.print(
+            "[green]Verified: every number matches a cited fact[/green] "
+            f"({memo.attempts} attempt(s))"
+        )
     else:
-        render(result)
-        if save:
-            console.print(f"[dim]Saved {out_file}[/dim]")
+        console.print(
+            f"[red]NOT verified: {len(memo.problems)} problem(s) after "
+            f"{memo.attempts} attempt(s)[/red]"
+        )
+        for p in memo.problems:
+            console.print(f"  [red]- {escape(f'[{p.section}] {p.detail}')}[/red]")
+    for note in memo.notes:
+        console.print(f"[yellow]{escape(note)}[/yellow]")
+    if memo.estimated_cost_usd is None:
+        cost = "unknown (no price for this model in settings.toml)"
+    else:
+        cost = f"${memo.estimated_cost_usd:.5f}"
+    this_run = "$0 (served from cache)" if memo.cached else cost
+    console.print(
+        f"[dim]{memo.provider} / {memo.model} · prompt {memo.prompt_version} · "
+        f"{memo.usage.input_tokens} in + {memo.usage.output_tokens} out tokens · "
+        f"{memo.latency_ms / 1000:.1f} s · memo cost {cost} · this run {this_run} · "
+        f"facts {memo.facts_hash} · snapshot {memo.snapshot_date}[/dim]"
+    )
+
+
+@app.command(name="memo")
+def memo_cmd(
+    address: Annotated[str, typer.Argument(help="Street address, or 'lat, lon'")],
+    bedrooms: Annotated[int | None, typer.Option(help="Bedrooms of the flat")] = None,
+    room_type: Annotated[
+        str | None, typer.Option(help="Room type to compare against (default: Entire home/apt)")
+    ] = None,
+    min_reviews: Annotated[
+        int, typer.Option(help="Only comps with at least this many reviews in the last 12 months")
+    ] = 0,
+    min_rating: Annotated[
+        float | None, typer.Option(help="Only comps with at least this review score (0-5)")
+    ] = None,
+    max_min_nights: Annotated[
+        int | None,
+        typer.Option(help="Only comps whose minimum stay is at most this (drops monthly rentals)"),
+    ] = None,
+    superhost_only: Annotated[bool, typer.Option(help="Only comps run by superhosts")] = False,
+    radius: Annotated[
+        int | None,
+        typer.Option(help="Search radius in metres (default: auto, 500 m widened to 1.5 km)"),
+    ] = None,
+    snapshot: Annotated[
+        str | None, typer.Option(help="Snapshot date to use (default: latest loaded)")
+    ] = None,
+    city: CityOption = "thessaloniki",
+    cache: Annotated[bool, typer.Option(help="Reuse a cached verified memo (saves money)")] = True,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the Memo JSON")] = False,
+    db: DbOption = None,
+) -> None:
+    """An investment memo written by the configured LLM, with every number checked."""
+    import logging
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    settings = get_settings()
+    result = _run_analysis(
+        settings, address, bedrooms, room_type, min_reviews, min_rating, max_min_nights,
+        superhost_only, radius, 15, snapshot, city, db,
+    )  # fmt: skip
+    try:
+        provider = provider_factory(settings)
+        memo = write_memo(
+            result, settings, provider, request_id=uuid.uuid4().hex[:12], use_cache=cache
+        )
+    except LLMUnavailableError as exc:
+        console.print(f"[red]LLM not available: {escape(str(exc))}[/red]")
+        raise typer.Exit(3) from exc
+    except LLMError as exc:
+        console.print(f"[red]LLM call failed: {escape(str(exc))}[/red]")
+        raise typer.Exit(4) from exc
+    if as_json:
+        print(memo.model_dump_json(indent=2))
+    else:
+        render_memo(memo)
 
 
 @app.command()

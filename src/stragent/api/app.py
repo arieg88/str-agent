@@ -27,7 +27,7 @@ from stragent.analytics.comps import RadiusError
 from stragent.analytics.geocode import Geocoder, GeocodingError, NominatimGeocoder
 from stragent.api.deps import GeocoderFactory
 from stragent.api.routes import router
-from stragent.config import Settings, UnknownCityError, get_settings
+from stragent.config import Settings, UnknownCityError, get_settings, load_env
 
 STATIC_DIR = Path(__file__).parent / "static"
 log = logging.getLogger("stragent.api")
@@ -64,7 +64,9 @@ def create_app(
     db_path: Path | None = None,
     geocoder_for: GeocoderFactory | None = None,
 ) -> FastAPI:
-    settings = settings or get_settings()
+    if settings is None:  # production path; tests pass settings and never read .env
+        load_env()
+        settings = get_settings()
     env_db = os.environ.get("STRAGENT_DB_PATH")
     db_path = db_path or (Path(env_db) if env_db else settings.resolve(settings.paths.database))
 

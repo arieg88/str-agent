@@ -19,7 +19,11 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from stragent.models import Analysis, Fact, FactUnit, ValueRange
 
-FACTS_VERSION = 1
+FACTS_VERSION = 2  # 2: room type limited to Inside Airbnb's own values
+
+# The room type filter can be typed by a user; only these values reach the memo prompt.
+ROOM_TYPES = ("Entire home/apt", "Private room", "Shared room", "Hotel room")
+OTHER_ROOM_TYPE = "a custom room type"
 
 MONTHS_PER_YEAR = 12
 CURRENCY_SYMBOLS = {"EUR": "€", "USD": "$", "GBP": "£"}
@@ -86,7 +90,12 @@ CATALOGUE: list[_Entry] = [
         lambda a: a.location.neighbourhood,
         missing="outside the mapped neighbourhoods",
     ),
-    _Entry("filters.room_type", "Room type of the comps", "text", lambda a: a.filters.room_type),
+    _Entry(
+        "filters.room_type",
+        "Room type of the comps",
+        "text",
+        lambda a: a.filters.room_type if a.filters.room_type in ROOM_TYPES else OTHER_ROOM_TYPE,
+    ),
     _Entry(
         "filters.bedrooms",
         "Bedrooms asked for",

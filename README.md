@@ -83,6 +83,60 @@ Design notes: endpoints are thin wrappers around the same functions the CLI uses
 (`analysis.py`); each request opens its own read-only DuckDB connection, so `stragent ingest`
 can run while the server is up and new snapshots appear without a restart.
 
+## Investment memo (Stage 3)
+
+`stragent memo` turns an analysis into a short memo written by an LLM. The model never computes
+a figure: it gets a numbered list of facts and must tag every number it writes with the fact it
+came from (`a median of €78 [F17]`). A checker (`llm/validate.py`) verifies each one. If any
+number does not match, the memo is regenerated once with the problems fed back; if it still
+fails, it is returned marked **not verified**, with the problem list.
+
+```bash
+cp .env.example .env            # then put your key in .env
+uv run stragent memo "Egnatia 120" --bedrooms 2
+uv run stragent memo "40.6326, 22.9416" --bedrooms 2 --db data/demo.duckdb --no-cache
+```
+
+Each run prints tokens, latency and an estimated cost (from the prices in
+`config/settings.toml`; a model with no price shows cost unknown). Verified memos are cached
+under `data/cache/memo/`, so repeating a question costs nothing.
+
+### Switching the memo provider
+
+Provider and model are configuration, not code. Edit `[llm]` in `config/settings.toml`:
+
+```toml
+# Claude (default)
+[llm]
+provider = "anthropic"
+model = "claude-sonnet-5-5"        # or claude-haiku-5-5 for cheap development runs
+base_url = ""
+api_key_env = "ANTHROPIC_API_KEY"
+```
+
+```toml
+# OpenAI
+[llm]
+provider = "openai_compatible"
+model = "<openai-model-id>"        # an OpenAI chat model that supports structured outputs
+base_url = ""                      # empty = api.openai.com
+api_key_env = "OPENAI_API_KEY"
+```
+
+```toml
+# Local Ollama (no key, nothing leaves the machine): `ollama pull llama3.2` first
+[llm]
+provider = "openai_compatible"
+model = "llama3.2"
+base_url = "http://localhost:11434/v1/"
+api_key_env = ""
+```
+
+The same `openai_compatible` class covers vLLM and hosted open models: point `base_url` at the
+server. Small local models follow the citation rules less reliably, so expect more memos marked
+not verified; that is the checker doing its job. Add a `[llm.prices."<model>"]` entry to get
+cost estimates. Ollama Cloud does not support structured outputs.
+
 ## Example output (synthetic data)
 
 ```
@@ -140,6 +194,9 @@ src/stragent/
   cli.py             `stragent` command (ingest, analyze, serve, …)
   llm/facts.py       Analysis → numbered facts the memo may cite ([F17] = median nightly price)
   llm/validate.py    checks every number in a memo against the fact it cites
+  llm/provider.py    provider interface; anthropic_provider.py, openai_provider.py, fake.py
+  llm/prompts.py     loads prompts/memo/v1.md and fills it (no free text from users or listings)
+  memo.py            Analysis → Memo: generate, validate, regenerate once, cache
   api/app.py         FastAPI factory: middleware, error handlers, static page
   api/routes.py      endpoints (thin wrappers around analysis.py)
   api/static/        map page: index.html (layout), css/app.css, js/*.js (ES modules, no build step)

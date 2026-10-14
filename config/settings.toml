@@ -45,3 +45,40 @@ multi_listing_threshold = 2
 [geocoding]
 user_agent = "stragent/0.1 (portfolio project)"
 min_interval_seconds = 1.1
+
+[llm]
+# The memo writer (Stage 3). One provider class per API style:
+#   "anthropic"          Claude, through the anthropic SDK
+#   "openai_compatible"  OpenAI, or any server with an OpenAI-style API (Ollama, vLLM, hosted
+#                        open models): set base_url, and api_key_env (empty for a local server)
+# See README, "Switching the memo provider", for one block per provider.
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+base_url = ""
+api_key_env = "ANTHROPIC_API_KEY"
+# Seconds. timeout caps one HTTP attempt; deadline caps the whole memo (SDK retries and the one
+# regeneration included). A regeneration is not started with less than min_attempt left.
+timeout_seconds = 60
+max_retries = 1
+deadline_seconds = 120
+min_attempt_seconds = 15
+max_output_tokens = 8000
+# Anthropic only: low | medium | high | xhigh | max. Current Claude models take no temperature.
+effort = "medium"
+prompt_version = "v1"
+
+# Estimated cost per memo, USD per million tokens. A model with no entry is logged with cost
+# null, never a guess. Source: Anthropic's published first-party API prices for these models,
+# as listed in Anthropic's model table dated 2026-10-06 (platform.claude.com, "Pricing").
+# Re-check there before relying on the numbers.
+[llm.prices."claude-sonnet-5-5"]
+input = 2.00
+output = 10.00
+
+[llm.prices."claude-haiku-5-5"]
+input = 0.10
+output = 0.50
+
+[llm.prices."claude-opus-5-5"]
+input = 4.00
+output = 20.00

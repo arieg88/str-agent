@@ -28,6 +28,7 @@ make lint-js            # optional: Biome on the map page via npx (not in check 
 make ingest SNAPSHOT="2026-09-22 2026-06-20"
 uv run stragent analyze "Egnatia 120" --bedrooms 2 --radius 800
 uv run stragent snapshots / drop --snapshot DATE
+uv run stragent memo "Egnatia 120" --bedrooms 2   # LLM memo; needs a key in .env
 ```
 
 ## Layout
@@ -36,7 +37,9 @@ uv run stragent snapshots / drop --snapshot DATE
 - `analytics/`: comps, revenue model, seasonality, geocoding, neighbourhoods (pure logic).
 - `data/`: cleaning, ingest, synthetic fixtures. `db.py`: DuckDB schema and migrations.
 - `llm/`: the memo pipeline. `facts.py` (Analysis -> numbered facts) and `validate.py` (every
-  number in a memo must be a correctly cited fact; its rules are that file's docstring).
+  number in a memo must be a correctly cited fact; its rules are that file's docstring),
+  `provider.py` (interface + `make_provider`), one module per provider, `prompts.py`, `cache.py`.
+- `memo.py`: Analysis -> Memo (shared by CLI and API, like `analysis.py`).
 - `models.py`: the Pydantic result contract (CLI JSON == API JSON). Extend, don't break.
 - `api/`: FastAPI app factory, thin routes, static map page (`api/static/`, see "Frontend structure").
 - `config/settings.toml`: every tunable assumption (radius, review rate, caps). No magic
@@ -67,6 +70,17 @@ uv run stragent snapshots / drop --snapshot DATE
 - Fact labels must pass the validator themselves: no spelled-out quantities ("top 3", not
   "three largest").
 - A new number format or exemption in the validator gets a row in `tests/test_validate.py`.
+- `memo.py`, the validator and the cache only see the `Provider` protocol. Providers raise only
+  `LLMError` (-> 502 `llm_error`) or `LLMUnavailableError` (-> 503 `llm_unavailable`).
+- Nothing typed by a user or taken from listing text goes into a prompt: warnings reach the model
+  as fixed text by `Analysis.warning_codes` (`WARNING_TEXT` in `prompts.py`), and the room type
+  only as one of Inside Airbnb's own values. A new warning in `analysis.py` needs a code.
+- Prompts are files (`src/stragent/prompts/memo/vN.md`). Change one by adding a new version.
+- Tests never construct a real client against the network: providers are tested through
+  `httpx2.MockTransport`, the flow through `ScriptedProvider`. No sampling parameters are sent to
+  Claude (current models reject them).
+- `.env` is loaded by the CLI and `create_app()` without overriding variables already set; tests
+  never load it.
 
 ## Frontend structure
 Plain ES modules served by FastAPI from `src/stragent/api/static/`, no framework and no build
@@ -93,6 +107,8 @@ static/js/dom.js       el() helper (textContent only), formatters (eur, pct, mon
   more realistic, so treat revenue as optimistic. Ranges, never single numbers.
 - Calendar "unavailable" means booked OR blocked by the host.
 - Nominatim: max 1 request/s, real User-Agent, cache results.
+- Printing model output with rich: use `markup=False` or `escape()`, or `[F17]` tags and
+  `[llm]` vanish as markup.
 
 ## Environment
 Developed on WSL with the repo under `/mnt/c/...` (`UV_LINK_MODE=copy` is set in the Makefile).

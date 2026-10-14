@@ -205,36 +205,45 @@ def analyze(
 
     stats = comp_stats(comps)
     warnings: list[str] = []
+    # Same order as warnings: a fixed code per message, for the memo prompt (no free text there)
+    codes: list[str] = []
     target = settings.comps.min_comps
     if stats.count < target:
+        codes.append("few_comps")
         warnings.append(
             f"Only {stats.count} comparable listings within {selection.filters.radius_m} m "
             f"(target {target}); treat the ranges as rough"
             + (" or try a larger radius." if selection.filters.radius_mode == "fixed" else ".")
         )
     elif selection.filters.radius_widened:
+        codes.append("radius_widened")
         warnings.append(
             f"Search radius widened to {selection.filters.radius_m} m to find enough comps."
         )
     if stats.count and stats.active_count < max(3, stats.count // 2):
+        codes.append("few_active")
         warnings.append(
             f"Only {stats.active_count} of {stats.count} comps had reviews in the last 12 months."
         )
     capped_share = (sum(e.capped for e in active) / len(active)) if active else None
     if capped_share and capped_share > 0.3:
+        codes.append("occupancy_capped")
         warnings.append(
             f"{capped_share:.0%} of active comps hit the {occ_cfg.max_occupancy:.0%} occupancy "
             "cap, so the top of the revenue range may be understated."
         )
     if hood is None:
+        codes.append("outside_neighbourhoods")
         warnings.append("The location is outside the neighbourhood polygons in this snapshot.")
     if any("(synthetic)" in str(n) for n in selection.area["neighbourhood"].dropna().unique()):
+        codes.append("synthetic_data")
         warnings.append("SYNTHETIC FIXTURE DATA: these numbers are not real market data.")
     if (
         not comps.empty
         and comps["number_of_reviews"].fillna(0).gt(0).any()
         and comps["first_review"].isna().all()
     ):
+        codes.append("missing_first_review")
         warnings.append(
             "'Active since' is empty: this snapshot was loaded before that column existed. "
             f"Re-run `stragent ingest --snapshot {snapshot}` (files are cached)."
@@ -289,6 +298,7 @@ def analyze(
         market=market_stats(selection.area, selection.filters.radius_m, settings.market, snapshot),
         comps=listed,
         warnings=warnings,
+        warning_codes=codes,
     )
 
 
