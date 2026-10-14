@@ -138,10 +138,12 @@ src/stragent/
   analytics/neighbourhoods.py  per-neighbourhood summaries
   analysis.py        address → Analysis / Seasonality (shared by CLI and API)
   cli.py             `stragent` command (ingest, analyze, serve, …)
+  llm/facts.py       Analysis → numbered facts the memo may cite ([F17] = median nightly price)
+  llm/validate.py    checks every number in a memo against the fact it cites
   api/app.py         FastAPI factory: middleware, error handlers, static page
   api/routes.py      endpoints (thin wrappers around analysis.py)
   api/static/        map page: index.html (layout), css/app.css, js/*.js (ES modules, no build step)
-tests/               84 tests: maths, cleaning, geocoding (mocked HTTP), end to end, API
+tests/               maths, cleaning, geocoding (mocked HTTP), end to end, API, memo facts and validator
 tests/js/            map page unit tests, run by pytest through `node --test` (skipped without Node, required in CI)
 ```
 

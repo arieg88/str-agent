@@ -35,6 +35,8 @@ uv run stragent snapshots / drop --snapshot DATE
   `seasonality`). Add features here, not in the CLI or routes.
 - `analytics/`: comps, revenue model, seasonality, geocoding, neighbourhoods (pure logic).
 - `data/`: cleaning, ingest, synthetic fixtures. `db.py`: DuckDB schema and migrations.
+- `llm/`: the memo pipeline. `facts.py` (Analysis -> numbered facts) and `validate.py` (every
+  number in a memo must be a correctly cited fact; its rules are that file's docstring).
 - `models.py`: the Pydantic result contract (CLI JSON == API JSON). Extend, don't break.
 - `api/`: FastAPI app factory, thin routes, static map page (`api/static/`, see "Frontend structure").
 - `config/settings.toml`: every tunable assumption (radius, review rate, caps). No magic
@@ -53,8 +55,18 @@ uv run stragent snapshots / drop --snapshot DATE
 - Map page links built from data go through `httpsUrl()` in `dom.js` (`el()` drops any other
   `href`). CDN tags are version-pinned with `integrity` hashes; update the hash with the version.
 - Map page unit tests live in `tests/js/*.test.mjs` (Node's built-in runner, no npm packages).
-  `tests/test_frontend.py` runs them inside `make check`; without Node they are skipped locally
-  and fail in CI (`STRAGENT_REQUIRE_NODE=1`, with Node installed by `actions/setup-node`).
+  `tests/test_frontend.py` runs them inside `make check`. They are skipped locally without Node
+  and required in CI (`STRAGENT_REQUIRE_NODE=1` turns the skip into a failure; Node is installed
+  by `actions/setup-node`).
+
+## Memo rules (Stage 3)
+- Fact ids are fixed by position in `CATALOGUE` (`llm/facts.py`). Add new facts only at the END
+  and bump `FACTS_VERSION` when a label, unit or meaning changes; a test pins the first ids.
+- Anything the memo should be able to say as a number must be a fact computed in Python (see the
+  derived monthly revenue). The model never calculates.
+- Fact labels must pass the validator themselves: no spelled-out quantities ("top 3", not
+  "three largest").
+- A new number format or exemption in the validator gets a row in `tests/test_validate.py`.
 
 ## Frontend structure
 Plain ES modules served by FastAPI from `src/stragent/api/static/`, no framework and no build
@@ -92,5 +104,5 @@ Developed on WSL with the repo under `/mnt/c/...` (`UV_LINK_MODE=copy` is set in
   "Gotchas" or "Conventions" here. Keep this file about lasting facts, not to-dos.
 
 ## Git
-- Commit messages: short subject, bullet body.
+- Commit messages: short subject, bullet body. No `Co-Authored-By` lines and no session links.
 - Never commit `data/`, `outputs/` or `.duckdb` files.

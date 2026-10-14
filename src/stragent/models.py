@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -146,3 +147,56 @@ class Seasonality(BaseModel):
         description="Reviews posted per month before the snapshot: a lagging demand signal"
     )
     notes: list[str] = Field(default_factory=list)
+
+
+# --- Memo (Stage 3): facts the LLM may cite, the memo it writes, and the check on it ---
+
+FactUnit = Literal["money", "share", "count", "nights", "metres", "rating", "date", "text"]
+
+
+class Fact(BaseModel):
+    """One citable figure from an Analysis. The memo cites it as [F7]."""
+
+    id: str = Field(description="Fixed per key: F7 means the same thing for every address")
+    key: str = Field(description="Stable name, e.g. comp_stats.nightly_price.median")
+    label: str
+    value: int | float | str | None = Field(description="Full precision; None = not available")
+    unit: FactUnit = Field(description="'share' values are fractions: 0.26 is shown as 26%")
+    display: str = Field(description="The value as the memo should write it, e.g. €8,256 or 26%")
+
+
+ProblemKind = Literal[
+    "untagged_number",
+    "unknown_fact",
+    "value_mismatch",
+    "unit_mismatch",
+    "spelled_out_number",
+    "too_many_tags",
+]
+
+
+class MemoProblem(BaseModel):
+    kind: ProblemKind
+    section: str
+    text: str = Field(description="The number, date or tag as written in the memo")
+    fact_ids: list[str] = Field(default_factory=list, description="The tags it was checked against")
+    detail: str = Field(description="What is wrong, in a form that can be fed back to the model")
+    context: str = Field("", description="The surrounding words")
+
+
+class MemoSections(BaseModel):
+    """The memo's fixed structure. Every number in the text carries a [F#] tag."""
+
+    verdict: str
+    pricing: str
+    occupancy_revenue: str
+    competition: str
+    risks: str
+    checks_before_buying: str
+
+
+class MemoValidation(BaseModel):
+    verified: bool = Field(description="True only if every number matched a cited fact")
+    problems: list[MemoProblem] = Field(default_factory=list)
+    numbers_checked: int = 0
+    facts_cited: list[str] = Field(default_factory=list)

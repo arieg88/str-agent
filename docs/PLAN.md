@@ -5,7 +5,9 @@
 This is the original plan. Where the build differs, this section wins.
 
 - **Done: Stages 0-2**, plus comp filters, adjustable radius, "Active since", total reviews,
-  seasonality charts, multi-snapshot loading and `stragent drop`.
+  seasonality charts, multi-snapshot loading and `stragent drop`. After Stage 2: the map page
+  split into ES modules, the map page hardening commit, and the CI Node requirement (CI installs
+  Node and sets `STRAGENT_REQUIRE_NODE=1`, so the JS tests cannot be skipped there).
 - **DuckDB instead of Postgres/PostGIS** for Stages 0-3 (distances via haversine SQL,
   neighbourhoods via shapely). Revisit at Stage 4 (pgvector) or keep DuckDB with its vector
   extension for a cheaper demo.
@@ -17,7 +19,18 @@ This is the original plan. Where the build differs, this section wins.
   an older one still in flight, errors show the request id, a failed search clears the old
   result, startup errors say what actually failed, no price legend without comps, and the
   Leaflet CDN tags carry integrity hashes.
-- **Next:** Stage 3.
+- **Stage 3 in progress** (memo with verified citations), in four reviewed steps:
+  - **3a done:** `llm/facts.py` turns an Analysis into numbered facts with fixed ids
+    (`[F17]` is always the median nightly price; inputs and a derived monthly revenue included),
+    and `llm/validate.py` checks that every number in a memo is a correctly cited fact. The
+    validator's rules are the docstring of `validate.py`. No LLM yet.
+  - **Next: 3b** provider layer (`anthropic` and `openai_compatible`, plus a scripted fake),
+    memo flow (generate, validate, regenerate once), prompt file, disk cache and `stragent memo`.
+    Then 3c (API + map page) and 3d (golden set, `stragent eval-memo`).
+  - Decided for Stage 3: default model `claude-sonnet-5-5`; no streaming (the memo is validated
+    whole before it is shown as verified; revisit with the Stage 5 chat); seasonality is not in
+    the memo facts yet; the validator checks numbers, not wording ("higher than" is unchecked
+    until the Stage 6 judge).
 - **Known follow-ups on the map page:**
   - Dark mode gaps: `.error` is a hard-coded `#b3261e`, and map and chart colours are read once
     when drawn, so they do not follow a theme switch until the next search.
@@ -232,6 +245,10 @@ Goal: one command scores the whole system, and CI blocks changes that make it wo
 - 2–3 prompt versions compared on the memo
 - Retrieval settings compared (with and without reranker)
 
+**Model comparison (decided in Stage 3):** run the Stage 3 golden set across providers and models
+through the same provider layer, and report per model: unverified-number rate, retries, latency
+and cost.
+
 **Engineering:** pytest-style eval runner, results saved as JSON per run, a small HTML report, and a GitHub Actions job that fails if key metrics drop below thresholds.
 
 **Done when:** `make eval` produces a report, and the README shows a model comparison table.
@@ -272,6 +289,8 @@ That is roughly $5–15 a month for Stages 2–3 and $20–30 from Stage 4. New 
 - Caching: geocodes, comps and memos for repeated addresses
 - Model fallback: if the primary provider errors, retry on a secondary
 - A monthly budget alert on the cloud account
+- A cost guard for the public `/api/memo` (decided in Stage 3): a daily cap on memo generations,
+  or serve only cached golden-set memos on the demo
 
 **Done when:** the demo URL works from your phone, a trace of a full agent run can be opened and explained, and ingestion of a new snapshot runs without you.
 

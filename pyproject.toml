@@ -15,6 +15,9 @@ dependencies = [
     "rich>=13.7",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "anthropic>=1.14.0",
+    "openai>=3.31.0",
+    "python-dotenv>=1.2.4",
 ]
 
 [dependency-groups]
